@@ -25,5 +25,29 @@ applications:
       path: components/cert-manager-operator
       repoURL: https://github.com/rich-p-ai/argo-demo.git
 
+  # External Secrets Operator for ct1 cluster
+  ct1-external-secrets-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: external-secrets
+      server: https://api.ct1.thir.p3.openshiftapps.com:443
+    source:
+      path: components/external-secrets-operator
+      repoURL: https://github.com/rich-p-ai/argo-demo.git
+
+  # Azure Key Vault ClusterSecretStore for ct1
+  ct1-eso-azure-keyvault:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: external-secrets
+      server: https://api.ct1.thir.p3.openshiftapps.com:443
+    source:
+      path: components/eso-azure-keyvault
+      repoURL: https://github.com/rich-p-ai/argo-demo.git
+
   # Add ct1-specific applications below:
 

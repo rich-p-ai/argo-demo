@@ -22,6 +22,24 @@ applications:
     source:
       path: components/cert-manager-operator
 
+  external-secrets-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: external-secrets
+    source:
+      path: components/external-secrets-operator
+
+  eso-azure-keyvault:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: external-secrets
+    source:
+      path: components/eso-azure-keyvault
+
   acm-operator:
     annotations:
       argocd.argoproj.io/compare-options: IgnoreExtraneous

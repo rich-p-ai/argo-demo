@@ -4,9 +4,6 @@ kind: Kustomization
 components:
   - ../../groups/all
 
-resources:
-  - ct1-root-application.yaml
-
 helmGlobals:
   chartHome: ../../.helm/charts
 
@@ -15,4 +12,5 @@ helmCharts:
   valuesFile: values.yaml
   namespace: openshift-gitops
 
-patches: [] 
+patches: []
+

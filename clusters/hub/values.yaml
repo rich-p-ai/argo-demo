@@ -1,4 +1,26 @@
+# Hub Cluster Configuration
+
+default:
+  app:
+    labels:
+      app-source: cluster-hub
+      repo: cluster-config
+    destination:
+      server: https://kubernetes.default.svc
+    source:
+      repoURL: https://github.com/rich-p-ai/argo-demo.git
+      targetRevision: HEAD
+
 applications:
+
+  cert-manager-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: cert-manager
+    source:
+      path: components/cert-manager-operator
 
   acm-operator:
     annotations:
@@ -7,7 +29,7 @@ applications:
     destination:
       namespace: open-cluster-management
     source:
-      path: clusters/hub/overlays/acm-operator
+      path: clusters/hub/acm-operator
 
   acm-configuration:
     annotations:
@@ -16,5 +38,4 @@ applications:
     destination:
       namespace: open-cluster-management
     source:
-      path: clusters/hub/overlays/acm-configuration         
-                          
+      path: clusters/hub/acm-configuration

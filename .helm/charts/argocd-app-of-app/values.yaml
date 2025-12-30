@@ -7,13 +7,13 @@ default:
     autoSyncPrune: false
     project: cluster-config
     labels:
-      app-source: cluster-hub
+      app-source: cluster-config
       repo: cluster-config
     destination:
       namespace: openshift-gitops
       server: https://kubernetes.default.svc
     source:
-      repoURL: https://github.com/environment-aas/platform-iac.git
+      repoURL: https://github.com/rich-p-ai/argo-demo.git
       targetRevision: HEAD
     syncOptions:
     - ApplyOutOfSyncOnly=true

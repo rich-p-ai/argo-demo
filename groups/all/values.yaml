@@ -8,6 +8,7 @@ projects:
     namespace: openshift-gitops
     sourceRepos:
     - https://github.com/rich-p-ai/argo-demo.git
+    - https://github.com/rich-p-ai/argo-apps-demo.git
     destinations: |
       - namespace: '*'
         server: '*'

@@ -6,6 +6,7 @@ components:
 
 resources:
   - ct1-root-application.yaml
+  - demo-apps-root-application.yaml
 
 helmGlobals:
   chartHome: ../../.helm/charts

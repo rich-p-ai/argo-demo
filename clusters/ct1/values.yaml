@@ -13,8 +13,8 @@ default:
       targetRevision: HEAD
 
 applications:
-  # Override cert-manager to deploy to ct1 cluster
-  cert-manager-operator:
+  # Cert-manager for ct1 cluster
+  ct1-cert-manager-operator:
     annotations:
       argocd.argoproj.io/compare-options: IgnoreExtraneous
       argocd.argoproj.io/sync-wave: '5'

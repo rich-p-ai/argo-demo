@@ -1,0 +1,12 @@
+---
+apiVersion: operator.external-secrets.io/v1alpha1
+kind: OperatorConfig
+metadata:
+  name: cluster
+  namespace: external-secrets
+spec:
+  # Install ESO with ClusterSecretStore capability
+  installCRDs: true
+  prometheus:
+    enabled: false
+

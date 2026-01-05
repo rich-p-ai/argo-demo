@@ -1,6 +1,7 @@
 # Root Application for Demo Apps (App of Apps)
 # This Application is deployed by Hub ArgoCD
-# It creates Application CRs that target the ct1 cluster
+# It creates Application CRs in ct1's openshift-gitops namespace
+# ct1's ArgoCD then picks up those Applications and deploys the workloads
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -23,10 +24,10 @@ spec:
     targetRevision: HEAD
     path: base
   
-  # Applications are created in hub ArgoCD namespace
-  # but they target ct1 cluster as destination
+  # Deploy Application CRs to ct1 cluster's openshift-gitops namespace
+  # ct1's ArgoCD will then manage these applications
   destination:
-    server: https://kubernetes.default.svc
+    server: https://api.ct1.sw9e.p3.openshiftapps.com:443
     namespace: openshift-gitops
   
   syncPolicy:

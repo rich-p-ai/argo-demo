@@ -7,7 +7,7 @@ default:
       app-source: cluster-ct1
       repo: cluster-config
     destination:
-      server: https://api.ct1.thir.p3.openshiftapps.com:443
+      server: https://api.ct1.sw9e.p3.openshiftapps.com:443
     source:
       repoURL: https://github.com/rich-p-ai/argo-demo.git
       targetRevision: HEAD
@@ -20,7 +20,7 @@ applications:
       argocd.argoproj.io/sync-wave: '5'
     destination:
       namespace: cert-manager
-      server: https://api.ct1.thir.p3.openshiftapps.com:443
+      server: https://api.ct1.sw9e.p3.openshiftapps.com:443
     source:
       path: components/cert-manager-operator
       repoURL: https://github.com/rich-p-ai/argo-demo.git
@@ -32,7 +32,7 @@ applications:
       argocd.argoproj.io/sync-wave: '5'
     destination:
       namespace: external-secrets
-      server: https://api.ct1.thir.p3.openshiftapps.com:443
+      server: https://api.ct1.sw9e.p3.openshiftapps.com:443
     source:
       path: components/external-secrets-operator
       repoURL: https://github.com/rich-p-ai/argo-demo.git
@@ -44,7 +44,7 @@ applications:
       argocd.argoproj.io/sync-wave: '10'
     destination:
       namespace: external-secrets
-      server: https://api.ct1.thir.p3.openshiftapps.com:443
+      server: https://api.ct1.sw9e.p3.openshiftapps.com:443
     source:
       path: components/eso-azure-keyvault
       repoURL: https://github.com/rich-p-ai/argo-demo.git

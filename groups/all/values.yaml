@@ -19,4 +19,13 @@ projects:
 
 # Common applications are defined here
 # Each cluster can override or add additional applications in their values.yaml
-applications: {}
+applications:
+
+  node-health-check-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: openshift-node-healthcheck-operator
+    source:
+      path: groups/all/overlays/node-health-check-operator

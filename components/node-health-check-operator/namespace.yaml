@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-node-healthcheck-operator
+  labels:
+    openshift.io/cluster-monitoring: "true"
+  annotations:
+    openshift.io/description: "Namespace for the Node Health Check Operator"

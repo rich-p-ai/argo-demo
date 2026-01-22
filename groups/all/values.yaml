@@ -30,6 +30,15 @@ applications:
     source:
       path: groups/all/overlays/node-health-check-operator
 
+  mtv-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: openshift-mtv
+    source:
+      path: groups/all/overlays/mtv-operator
+
   netapp-trident-operator:
     annotations:
       argocd.argoproj.io/compare-options: IgnoreExtraneous

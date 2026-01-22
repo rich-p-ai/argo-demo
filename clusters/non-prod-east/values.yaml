@@ -7,4 +7,13 @@ applications:
     destination:
       namespace: kube-ops-view
     source:
-      path: clusters/non-prod-east/overlays/kube-ops-view            
+      path: clusters/non-prod-east/overlays/kube-ops-view
+
+  mtv-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: openshift-mtv
+    source:
+      path: clusters/non-prod-east/overlays/mtv-configuration

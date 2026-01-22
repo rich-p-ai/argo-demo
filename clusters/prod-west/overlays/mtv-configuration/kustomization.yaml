@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../../components/mtv-configuration/
+
+# Customize MTV configuration for prod-west cluster
+# Production clusters may have higher capacity
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/controller_max_vm_inflight
+        value: 30
+      - op: replace
+        path: /spec/controller_precopy_interval
+        value: 30
+    target:
+      kind: ForkliftController
+      name: forklift-controller

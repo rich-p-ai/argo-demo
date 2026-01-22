@@ -1,3 +1,5 @@
+# MIA Cluster Configuration
+
 applications:
 
   mtv-configuration:
@@ -7,4 +9,4 @@ applications:
     destination:
       namespace: openshift-mtv
     source:
-      path: clusters/prod-west/overlays/mtv-configuration
+      path: clusters/mia/overlays/mtv-configuration

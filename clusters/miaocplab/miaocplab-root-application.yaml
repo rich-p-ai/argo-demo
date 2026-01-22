@@ -1,20 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: ct1-applications
+  name: miaocplab-applications
   namespace: openshift-gitops
   finalizers:
     - resources-finalizer.argocd.argoproj.io
   labels:
     app-source: root
     repo: cluster-config
-    cluster: ct1
+    cluster: miaocplab
 spec:
   project: default
   source:
-    repoURL: https://github.com/rich-p-ai/argo-demo.git
+    repoURL: 
     targetRevision: HEAD
-    path: clusters/ct1
+    path: clusters/miaocplab
     kustomize:
       buildOptions: --enable-helm
   destination:
@@ -37,4 +37,3 @@ spec:
         duration: 5s
         factor: 2
         maxDuration: 3m
-

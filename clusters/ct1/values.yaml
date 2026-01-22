@@ -49,5 +49,16 @@ applications:
       path: components/eso-azure-keyvault
       repoURL: https://github.com/rich-p-ai/argo-demo.git
 
-  # Add ct1-specific applications below:
+  # MTV Configuration for ct1 cluster
+  ct1-mtv-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: openshift-mtv
+      server: https://api.ct1.sw9e.p3.openshiftapps.com:443
+    source:
+      path: clusters/ct1/overlays/mtv-configuration
+      repoURL: https://github.com/rich-p-ai/argo-demo.git
 
+  # Add ct1-specific applications below:

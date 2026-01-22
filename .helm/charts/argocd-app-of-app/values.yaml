@@ -15,6 +15,9 @@ default:
     source:
       repoURL: https://github.com/rich-p-ai/argo-demo.git
       targetRevision: HEAD
+      extraSourceFields: |
+        kustomize:
+          buildOptions: --enable-helm
     syncOptions:
     - ApplyOutOfSyncOnly=true
     - PrunePropagationPolicy=foreground

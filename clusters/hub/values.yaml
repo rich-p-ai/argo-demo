@@ -57,3 +57,12 @@ applications:
       namespace: open-cluster-management
     source:
       path: clusters/hub/acm-configuration
+
+  mtv-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: openshift-mtv
+    source:
+      path: clusters/hub/overlays/mtv-configuration

@@ -1,0 +1,16 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../../../components/openshift-virtualization-operator/
+
+# Optional patches to customize for non-prod environment
+# Example: Use a specific channel version
+# patches:
+#   - patch: |-
+#       - op: replace
+#         path: /spec/channel
+#         value: stable-4.14
+#     target:
+#       kind: Subscription

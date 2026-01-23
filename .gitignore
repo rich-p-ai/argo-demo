@@ -1,1 +1,8 @@
 .vscode/settings.json
+
+# Local secrets (DO NOT COMMIT)
+.env
+.env.local
+*.secret
+secrets/
+Rich_accessKeys.csv

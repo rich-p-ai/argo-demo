@@ -1,0 +1,35 @@
+#------------------------------------------------------------------------------
+# Dedicated Admin RBAC Configuration
+# Purpose: Grant dedicated-admin privileges (limited cluster admin)
+#------------------------------------------------------------------------------
+# Dedicated admins can:
+#   - Manage projects and namespaces
+#   - View cluster-level resources
+#   - Manage most workloads
+# Dedicated admins cannot:
+#   - Modify cluster operators
+#   - Access system namespaces (openshift-*, kube-*)
+#   - Modify cluster-wide settings
+#------------------------------------------------------------------------------
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dedicated-admins-binding
+  labels:
+    app.kubernetes.io/name: dedicated-admin-rbac
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/managed-by: gitops
+    team: platform-engineering
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dedicated-admin  # ROSA-specific role
+subjects:
+  # Add dedicated admin users here
+  # - apiGroup: rbac.authorization.k8s.io
+  #   kind: User
+  #   name: USERNAME
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: dedicated-admins

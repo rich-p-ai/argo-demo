@@ -4,17 +4,17 @@ kind: ForkliftController
 metadata:
   name: forklift-controller
   namespace: openshift-mtv
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 spec:
-  # Feature gates for MTV functionality
-  feature_ui: true
-  feature_validation: true
-  feature_must_gather_api: true
+  # Controller container resource limits
+  controller_container_limits_cpu: 2000m
+  controller_container_limits_memory: 2000Mi
   
-  # Controller configuration
-  controller_max_vm_inflight: 20
-  controller_precopy_interval: 60
-  controller_snapshot_removal_timeout_minutes: 120
-  controller_snapshot_status_check_rate_seconds: 10
+  # Inventory container resource limits
+  inventory_container_limits_memory: 2000Mi
   
-  # Performance tuning - adjust per cluster capacity
-  controller_vsphere_incremental_backup: true
+  # Feature flags
+  feature_ui_plugin: "true"
+  feature_validation: "true"
+  feature_volume_populator: "true"

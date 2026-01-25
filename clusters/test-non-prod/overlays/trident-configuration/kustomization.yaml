@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Use the base trident-configuration component
+# NOTE: The base component contains POC-specific FSx ONTAP backend configs
+# Update the backend LIFs and SVMs for this cluster's FSx ONTAP instances
+resources:
+  - ../../../../components/trident-configuration
+
+# Uncomment and modify patches below to customize for test-non-prod cluster
+# patches:
+#   - patch: |-
+#       - op: replace
+#         path: /spec/managementLIF
+#         value: "svm-XXXXX.fs-XXXXX.fsx.us-east-1.amazonaws.com"
+#       - op: replace
+#         path: /spec/dataLIF
+#         value: "svm-XXXXX.fs-XXXXX.fsx.us-east-1.amazonaws.com"
+#       - op: replace
+#         path: /spec/svm
+#         value: "test-nonprod-svm"
+#     target:
+#       kind: TridentBackendConfig
+#       name: backend-fsx-ontap-nas

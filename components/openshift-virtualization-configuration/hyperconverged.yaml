@@ -1,0 +1,83 @@
+---
+apiVersion: hco.kubevirt.io/v1beta1
+kind: HyperConverged
+metadata:
+  name: kubevirt-hyperconverged
+  namespace: openshift-cnv
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    deployOVS: "false"
+spec:
+  # Certificate configuration
+  certConfig:
+    ca:
+      duration: 48h0m0s
+      renewBefore: 24h0m0s
+    server:
+      duration: 24h0m0s
+      renewBefore: 12h0m0s
+  
+  # VM Console Proxy
+  deployVmConsoleProxy: false
+  
+  # Application Aware Quota
+  enableApplicationAwareQuota: false
+  
+  # Enable common boot image import for golden images
+  enableCommonBootImageImport: true
+  
+  # Live migration on node drain
+  evictionStrategy: LiveMigrate
+  
+  # Feature gates
+  featureGates:
+    alignCPUs: false
+    decentralizedLiveMigration: false
+    declarativeHotplugVolumes: false
+    deployKubeSecondaryDNS: false
+    disableMDevConfiguration: false
+    downwardMetrics: false
+    enableMultiArchBootImageImport: false
+    persistentReservation: false
+  
+  # Filesystem overhead
+  filesystemOverhead:
+    global: "0.10"
+  
+  # Memory overcommit settings
+  higherWorkloadDensity:
+    memoryOvercommitPercentage: 100
+  
+  # Infrastructure settings
+  infra: {}
+  
+  # Live migration configuration
+  liveMigrationConfig:
+    allowAutoConverge: false
+    allowPostCopy: false
+    completionTimeoutPerGiB: 150
+    parallelMigrationsPerCluster: 5
+    parallelOutboundMigrationsPerNode: 2
+    progressTimeout: 150
+  
+  # Resource requirements
+  resourceRequirements:
+    vmiCPUAllocationRatio: 3
+  
+  # Uninstall strategy - block if VMs exist
+  uninstallStrategy: BlockUninstallIfWorkloadsExist
+  
+  # Virtual machine options
+  virtualMachineOptions:
+    disableFreePageReporting: false
+    disableSerialConsoleLog: true
+  
+  # Workload update strategy
+  workloadUpdateStrategy:
+    batchEvictionInterval: 1m0s
+    batchEvictionSize: 10
+    workloadUpdateMethods:
+    - LiveMigrate
+  
+  # Workloads settings
+  workloads: {}

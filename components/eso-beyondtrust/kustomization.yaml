@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # NOTE: bt-apikey-secret.yaml contains placeholder API key
+  # Create this secret manually before deploying SecretStore
+  # - bt-apikey-secret.yaml
+  - secret-store.yaml

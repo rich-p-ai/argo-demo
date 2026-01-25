@@ -184,9 +184,9 @@ if [ -n "$OPENSHIFT_VERSION" ]; then
     ROSA_CMD+=" --version=${OPENSHIFT_VERSION}"
 fi
 
-# Tags
+# Tags (use separate --tags argument with quoted value to handle spaces)
 if [ -n "$TAGS" ]; then
-    ROSA_CMD+=" --tags=${TAGS}"
+    ROSA_CMD+=" --tags '${TAGS}'"
 fi
 
 # FIPS
@@ -238,8 +238,18 @@ echo ""
 echo "Check status:"
 echo "  rosa describe cluster -c ${CLUSTER_NAME}"
 echo ""
-echo "After cluster is ready, create admin user:"
-echo "  rosa create admin -c ${CLUSTER_NAME}"
+echo -e "${CYAN}============================================${NC}"
+echo -e "${CYAN}  Post-Install Steps (after cluster is ready)${NC}"
+echo -e "${CYAN}============================================${NC}"
 echo ""
-echo "Or watch until ready and create admin automatically:"
-echo "  rosa describe cluster -c ${CLUSTER_NAME} --watch && rosa create admin -c ${CLUSTER_NAME}"
+echo "1. Configure corporate network access (REQUIRED for PrivateLink clusters):"
+echo "   ${SCRIPT_DIR}/configure-cluster-access.sh ${CLUSTER_NAME}"
+echo ""
+echo "2. Create admin user:"
+echo "   rosa create admin -c ${CLUSTER_NAME}"
+echo ""
+echo "3. Configure LDAP identity provider (optional):"
+echo "   See: configs/idp/ldap-canon.env"
+echo ""
+echo "Or run all post-install steps:"
+echo "   ${SCRIPT_DIR}/post-install.sh ${CLUSTER_NAME}"

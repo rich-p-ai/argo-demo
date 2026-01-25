@@ -144,6 +144,65 @@ PRIVATE_IDS=$(aws ec2 describe-subnets --region "$REGION" \
 
 ALL_IDS="${PUBLIC_IDS},${PRIVATE_IDS}"
 
+#------------------------------------------------------------------------------
+# Associate DNS Resolver Rule (for corporate DNS resolution)
+#------------------------------------------------------------------------------
+echo ""
+echo -e "${YELLOW}Checking for corporate DNS resolver rule...${NC}"
+
+# Look for the forward-ROSA-vpc resolver rule
+DNS_RESOLVER_RULE_ID=$(aws route53resolver list-resolver-rules --region "$REGION" \
+    --query "ResolverRules[?Name=='forward-ROSA-vpc'].Id" --output text 2>/dev/null)
+
+if [ -n "$DNS_RESOLVER_RULE_ID" ] && [ "$DNS_RESOLVER_RULE_ID" != "None" ]; then
+    echo "Found DNS resolver rule: ${DNS_RESOLVER_RULE_ID}"
+    
+    # Check if already associated
+    EXISTING_ASSOC=$(aws route53resolver list-resolver-rule-associations --region "$REGION" \
+        --query "ResolverRuleAssociations[?ResolverRuleId=='${DNS_RESOLVER_RULE_ID}' && VPCId=='${VPC_ID}'].Id" \
+        --output text 2>/dev/null)
+    
+    if [ -n "$EXISTING_ASSOC" ] && [ "$EXISTING_ASSOC" != "None" ]; then
+        echo "  DNS resolver rule already associated with this VPC"
+    else
+        echo "  Associating DNS resolver rule with VPC..."
+        ASSOC_RESULT=$(aws route53resolver associate-resolver-rule \
+            --resolver-rule-id "$DNS_RESOLVER_RULE_ID" \
+            --vpc-id "$VPC_ID" \
+            --region "$REGION" 2>/dev/null)
+        
+        if [ $? -eq 0 ]; then
+            ASSOC_ID=$(echo "$ASSOC_RESULT" | jq -r '.ResolverRuleAssociation.Id')
+            echo "  Waiting for association to complete..."
+            
+            # Wait for association to complete (max 60 seconds)
+            for i in {1..12}; do
+                STATUS=$(aws route53resolver get-resolver-rule-association \
+                    --resolver-rule-association-id "$ASSOC_ID" \
+                    --region "$REGION" \
+                    --query 'ResolverRuleAssociation.Status' --output text 2>/dev/null)
+                
+                if [ "$STATUS" == "COMPLETE" ]; then
+                    echo -e "  ${GREEN}✓ DNS resolver rule associated successfully${NC}"
+                    echo "    Corporate hostnames (e.g., ad-ldap.cusa.canon.com) will be resolvable"
+                    break
+                elif [ "$STATUS" == "FAILED" ]; then
+                    echo -e "  ${RED}✗ DNS resolver association failed${NC}"
+                    break
+                fi
+                sleep 5
+            done
+        else
+            echo -e "  ${YELLOW}Warning: Could not associate DNS resolver rule${NC}"
+            echo "  You may need to manually associate it for LDAP authentication to work"
+        fi
+    fi
+else
+    echo -e "${YELLOW}No corporate DNS resolver rule found (forward-ROSA-vpc)${NC}"
+    echo "  LDAP authentication may not work without corporate DNS resolution"
+    echo "  To create a resolver rule, see AWS Route 53 Resolver documentation"
+fi
+
 echo ""
 echo -e "${CYAN}============================================${NC}"
 echo -e "${CYAN}  Configuration for cluster .env file${NC}"

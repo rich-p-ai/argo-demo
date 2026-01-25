@@ -1,0 +1,23 @@
+---
+apiVersion: trident.netapp.io/v1
+kind: TridentBackendConfig
+metadata:
+  name: backend-fsx-ontap-nas-linux
+  namespace: trident
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  version: 1
+  backendName: fsx-ontap-linux
+  storageDriverName: ontap-nas
+  
+  # FSx ONTAP Management and Data LIFs (Linux workloads)
+  managementLIF: svm-04e7e21fa0d9128b9.fs-0cb05ec73feb621e5.fsx.us-east-1.amazonaws.com
+  dataLIF: svm-04e7e21fa0d9128b9.fs-0cb05ec73feb621e5.fsx.us-east-1.amazonaws.com
+  
+  # SVM name
+  svm: fsx
+  
+  # Credentials secret (must contain 'username' and 'password' keys)
+  credentials:
+    name: backend-fsx-ontap-nas-secret

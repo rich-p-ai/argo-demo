@@ -1,0 +1,139 @@
+# Test Non-Prod Cluster Configuration
+# Cluster: test-non-prod
+# Region: us-east-1
+# Type: ROSA HCP (Private/PrivateLink)
+# VPC: ROSA-Non-Prod
+
+applications:
+
+  #---------------------------------------------------------------------------
+  # OpenShift Virtualization
+  #---------------------------------------------------------------------------
+  openshift-virtualization-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: openshift-cnv
+    source:
+      path: components/openshift-virtualization-operator
+
+  openshift-virtualization-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: openshift-cnv
+    source:
+      path: components/openshift-virtualization-configuration
+
+  #---------------------------------------------------------------------------
+  # Ansible Automation Platform
+  #---------------------------------------------------------------------------
+  aap-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: aap
+    source:
+      path: components/aap-operator
+
+  aap-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: aap
+    source:
+      path: clusters/test-non-prod/overlays/aap-configuration
+
+  #---------------------------------------------------------------------------
+  # OADP / Velero (Backup)
+  #---------------------------------------------------------------------------
+  oadp-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: openshift-adp
+    source:
+      path: components/oadp-operator
+
+  oadp-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: openshift-adp
+    source:
+      path: components/oadp-configuration
+
+  #---------------------------------------------------------------------------
+  # Migration Toolkit for Containers (MTC)
+  #---------------------------------------------------------------------------
+  mtc-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: openshift-migration
+    source:
+      path: components/mtc-operator
+
+  #---------------------------------------------------------------------------
+  # NetApp Trident Storage Configuration
+  #---------------------------------------------------------------------------
+  trident-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: trident
+    source:
+      path: clusters/test-non-prod/overlays/trident-configuration
+
+  #---------------------------------------------------------------------------
+  # MTV / Forklift Configuration
+  #---------------------------------------------------------------------------
+  mtv-configuration:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: openshift-mtv
+    source:
+      path: components/mtv-configuration
+
+  #---------------------------------------------------------------------------
+  # External Secrets - BeyondTrust
+  #---------------------------------------------------------------------------
+  eso-beyondtrust:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '10'
+    destination:
+      namespace: external-secrets-operator
+    source:
+      path: clusters/test-non-prod/overlays/eso-beyondtrust
+
+  #---------------------------------------------------------------------------
+  # Developer Tools
+  #---------------------------------------------------------------------------
+  web-terminal-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: openshift-operators
+    source:
+      path: components/web-terminal-operator
+
+  devworkspace-operator:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '5'
+    destination:
+      namespace: openshift-operators
+    source:
+      path: components/devworkspace-operator

@@ -1,0 +1,14 @@
+---
+# MTC Operator - uses the openshift-migration namespace (shared with OADP)
+# Namespace and OperatorGroup should be created by OADP or separately
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: mtc-operator
+  namespace: openshift-migration
+spec:
+  channel: release-v1.8
+  installPlanApproval: Automatic
+  name: mtc-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

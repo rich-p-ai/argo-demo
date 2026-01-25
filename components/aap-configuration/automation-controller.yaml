@@ -1,0 +1,92 @@
+---
+apiVersion: automationcontroller.ansible.com/v1beta1
+kind: AutomationController
+metadata:
+  name: automation-controller
+  namespace: aap
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  # Admin user configuration
+  admin_user: admin
+  
+  # API configuration
+  api_urlpattern_prefix: controller
+  
+  # Auto upgrade
+  auto_upgrade: true
+  
+  # Preload data
+  create_preload_data: true
+  
+  # Secrets management
+  garbage_collect_secrets: false
+  
+  # Deployment settings
+  idle_deployment: false
+  image_pull_policy: IfNotPresent
+  
+  # Ingress configuration
+  ingress_type: Route
+  route_tls_termination_mechanism: Edge
+  
+  # IPv6
+  ipv6_disabled: false
+  
+  # Load balancer settings (not used with Route ingress)
+  loadbalancer_class: ""
+  loadbalancer_ip: ""
+  loadbalancer_port: 80
+  loadbalancer_protocol: http
+  
+  # Metrics utility settings
+  metrics_utility_console_enabled: false
+  metrics_utility_cronjob_gather_schedule: '@hourly'
+  metrics_utility_cronjob_report_schedule: '@monthly'
+  metrics_utility_enabled: false
+  metrics_utility_pvc_claim_size: 5Gi
+  
+  # Logging
+  no_log: true
+  
+  # PostgreSQL configuration
+  # NOTE: postgres_configuration_secret must be created separately with DB credentials
+  # postgres_configuration_secret: <controller-name>-postgres-configuration
+  postgres_keepalives: true
+  postgres_keepalives_count: 5
+  postgres_keepalives_idle: 5
+  postgres_keepalives_interval: 5
+  
+  # Projects storage
+  projects_persistence: false
+  projects_storage_access_mode: ReadWriteMany
+  projects_storage_size: 8Gi
+  
+  # Replicas
+  replicas: 1
+  
+  # Self labels
+  set_self_labels: true
+  
+  # Task pod configuration
+  task_liveness_failure_threshold: 3
+  task_liveness_initial_delay: 5
+  task_liveness_period: 0
+  task_liveness_timeout: 1
+  task_manage_replicas: true
+  task_privileged: false
+  task_readiness_failure_threshold: 3
+  task_readiness_initial_delay: 20
+  task_readiness_period: 0
+  task_readiness_timeout: 1
+  
+  # Web pod configuration
+  web_liveness_failure_threshold: 3
+  web_liveness_initial_delay: 5
+  web_liveness_period: 0
+  web_liveness_timeout: 1
+  web_manage_replicas: true
+  web_readiness_failure_threshold: 3
+  web_readiness_initial_delay: 20
+  web_readiness_period: 0
+  web_readiness_timeout: 1

@@ -1,0 +1,75 @@
+---
+apiVersion: oadp.openshift.io/v1alpha1
+kind: DataProtectionApplication
+metadata:
+  name: velero
+  namespace: openshift-adp
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  # Disable backup images (use Restic/Kopia for file-level backup)
+  backupImages: false
+  
+  # Log format
+  logFormat: text
+  
+  configuration:
+    # Node Agent (Restic/Kopia) configuration
+    nodeAgent:
+      enable: true
+      uploaderType: restic
+      timeout: 1h
+      supplementalGroups: []
+      podConfig:
+        labels:
+          app.kubernetes.io/part-of: openshift-migration
+        resourceAllocations:
+          requests:
+            cpu: 100m
+    
+    # Velero configuration
+    velero:
+      # Default plugins
+      defaultPlugins:
+      - openshift
+      - aws
+      - gcp
+      - azure
+      
+      # Custom plugins (MTC plugin for migration)
+      customPlugins:
+      - name: mtc
+        image: registry.redhat.io/rhmtc/openshift-migration-velero-plugin-for-mtc-rhel8@sha256:93aeafa4df87367cc6326048489a0d7642b9ba13091c6ae4a3d04d45a7e6871c
+      
+      # Disable FS backup at Velero level (using node agent instead)
+      disableFsBackup: false
+      
+      # No default backup location - configure per environment
+      noDefaultBackupLocation: true
+      
+      # Pod configuration
+      podConfig:
+        labels:
+          app.kubernetes.io/part-of: openshift-migration
+        resourceAllocations:
+          requests:
+            cpu: 100m
+  
+  # Unsupported overrides for MTC integration
+  unsupportedOverrides:
+    operator-type: mtc
+  
+  # Backup storage location - uncomment and configure per environment
+  # backupLocations:
+  # - velero:
+  #     provider: aws
+  #     default: true
+  #     objectStorage:
+  #       bucket: <bucket-name>
+  #       prefix: velero
+  #     config:
+  #       profile: default
+  #       region: us-east-1
+  #     credential:
+  #       name: cloud-credentials
+  #       key: cloud

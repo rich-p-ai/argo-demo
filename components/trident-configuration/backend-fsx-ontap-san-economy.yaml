@@ -1,0 +1,22 @@
+---
+apiVersion: trident.netapp.io/v1
+kind: TridentBackendConfig
+metadata:
+  name: backend-fsx-ontap-san-econ
+  namespace: trident
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  version: 1
+  backendName: fsx-ontap-san-econ
+  storageDriverName: ontap-san-economy
+  
+  # FSx ONTAP Management LIF (iSCSI uses management LIF)
+  managementLIF: svm-0c7bd26bc341370ea.fs-09d8ed9a87f51d21f.fsx.us-east-1.amazonaws.com
+  
+  # SVM name
+  svm: fsx
+  
+  # Credentials secret (must contain 'username' and 'password' keys)
+  credentials:
+    name: backend-fsx-ontap-nas-secret

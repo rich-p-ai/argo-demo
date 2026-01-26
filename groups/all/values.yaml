@@ -28,6 +28,7 @@ applications:
       namespace: openshift-config
     source:
       path: groups/all/overlays/cluster-admin-group
+      targetRevision: main
 
   node-health-check-operator:
     annotations:

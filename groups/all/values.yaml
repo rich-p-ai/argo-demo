@@ -21,6 +21,14 @@ projects:
 # Each cluster can override or add additional applications in their values.yaml
 applications:
 
+  cluster-admin-group:
+    annotations:
+      argocd.argoproj.io/sync-wave: '1'
+    destination:
+      namespace: openshift-config
+    source:
+      path: groups/all/overlays/cluster-admin-group
+
   node-health-check-operator:
     annotations:
       argocd.argoproj.io/compare-options: IgnoreExtraneous

@@ -1,0 +1,20 @@
+#------------------------------------------------------------------------------
+# Cluster Admin Group Definition
+# Purpose: Central management of cluster-admin group membership
+# Managed via GitOps - changes should be made in the source repository
+#------------------------------------------------------------------------------
+apiVersion: user.openshift.io/v1
+kind: Group
+metadata:
+  name: cluster-admins
+  labels:
+    app.kubernetes.io/name: cluster-admin-group
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/managed-by: gitops
+    team: platform-engineering
+users:
+  # Platform Engineering Team Members
+  # Add or remove users by modifying this list
+  - Q22529
+  - Q11013
+  - q22529

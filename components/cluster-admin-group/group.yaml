@@ -15,7 +15,8 @@ metadata:
 users:
   # Platform Engineering Team Members
   # Add or remove users by modifying this list
+  - cluster-admin 
   - Q22529
   - Q11013
   - q22529
-  - Q22179
+  - q22179

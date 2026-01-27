@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - group.yaml
   - cluster-role-binding.yaml
+  - gitops-admin-rolebinding.yaml

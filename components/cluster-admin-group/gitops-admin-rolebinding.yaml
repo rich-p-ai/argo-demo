@@ -1,0 +1,23 @@
+#------------------------------------------------------------------------------
+# GitOps Admin Role Binding
+# Purpose: Grant cluster-admins group admin access to openshift-gitops namespace
+# Managed via GitOps - changes should be made in the source repository
+#------------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-admins-gitops-admin
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/name: cluster-admin-group
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/managed-by: gitops
+    team: platform-engineering
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: cluster-admins

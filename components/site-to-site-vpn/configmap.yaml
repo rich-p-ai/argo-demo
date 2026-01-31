@@ -1,0 +1,96 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipsec-config
+  namespace: site-to-site-vpn
+data:
+  # strongSwan ipsec.conf for AWS Site-to-Site VPN
+  # VPN Connection: vpn-0e42dd982c6950074 (rosa-vpn-cert)
+  # Transit Gateway: tgw-07baf7176234416a5
+  ipsec.conf: |
+    config setup
+        charondebug="ike 2, knl 2, cfg 2, net 2, esp 2, dmn 2, mgr 2"
+        uniqueids=no
+
+    conn %default
+        keyexchange=ikev2
+        ike=aes256-sha256-modp2048,aes128-sha1-modp1024!
+        esp=aes256-sha256,aes128-sha1!
+        dpdaction=restart
+        dpddelay=10s
+        dpdtimeout=30s
+        rekey=yes
+        reauth=no
+        authby=secret
+        left=%defaultroute
+        leftid=%any
+        leftsubnet=0.0.0.0/0
+        rightsubnet=10.222.155.0/24
+        auto=start
+        closeaction=restart
+        type=tunnel
+        installpolicy=yes
+
+    # AWS VPN Tunnel 1 (Primary)
+    conn aws-vpn-tunnel1
+        right=3.216.241.73
+        rightid=3.216.241.73
+        # Inside tunnel addresses
+        leftsourceip=169.254.134.202
+        # Mark for routing
+        mark=100
+
+    # AWS VPN Tunnel 2 (Backup)
+    conn aws-vpn-tunnel2
+        right=34.227.181.73
+        rightid=34.227.181.73
+        # Inside tunnel addresses
+        leftsourceip=169.254.154.234
+        # Mark for routing
+        mark=200
+
+  # IPSec secrets reference - actual PSK loaded from secret
+  ipsec.secrets: |
+    # Secrets loaded from mounted secret file
+    include /etc/ipsec.d/secrets/*.secrets
+
+  # Startup script for the VPN container
+  start-vpn.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "Starting Site-to-Site VPN Client..."
+    echo "================================================"
+
+    # Enable IP forwarding
+    echo "Configuring kernel parameters..."
+    sysctl -w net.ipv4.ip_forward=1 || true
+    sysctl -w net.ipv4.conf.all.accept_redirects=0 || true
+    sysctl -w net.ipv4.conf.all.send_redirects=0 || true
+    sysctl -w net.ipv4.conf.default.rp_filter=0 || true
+    sysctl -w net.ipv4.conf.all.rp_filter=0 || true
+
+    # Ensure directories exist
+    mkdir -p /etc/ipsec.d/secrets
+    mkdir -p /etc/swanctl/conf.d
+
+    # Copy configuration files
+    echo "Copying IPSec configuration..."
+    cp /etc/ipsec-config/ipsec.conf /etc/ipsec.conf
+    cp /etc/ipsec-config/ipsec.secrets /etc/ipsec.secrets
+
+    # Copy the PSK secret if mounted
+    if [ -f /etc/ipsec-secrets/tunnel1.secrets ]; then
+        echo "Loading VPN credentials..."
+        cp /etc/ipsec-secrets/tunnel1.secrets /etc/ipsec.d/secrets/
+        chmod 600 /etc/ipsec.d/secrets/tunnel1.secrets
+    else
+        echo "WARNING: VPN credentials secret not found!"
+        echo "Create the 'vpn-credentials' secret with tunnel1.secrets"
+    fi
+
+    # Start strongSwan charon daemon
+    echo "Starting strongSwan IPSec daemon..."
+    echo "================================================"
+    exec charon-systemd || exec ipsec start --nofork

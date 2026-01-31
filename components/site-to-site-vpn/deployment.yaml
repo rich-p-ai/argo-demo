@@ -1,0 +1,96 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: site-to-site-vpn
+  namespace: site-to-site-vpn
+  labels:
+    app: site-to-site-vpn
+    app.kubernetes.io/name: site-to-site-vpn
+    app.kubernetes.io/component: vpn-client
+  annotations:
+    description: "Site-to-Site VPN client connecting to AWS Transit Gateway"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: site-to-site-vpn
+  template:
+    metadata:
+      labels:
+        app: site-to-site-vpn
+        app.kubernetes.io/name: site-to-site-vpn
+        app.kubernetes.io/component: vpn-client
+    spec:
+      serviceAccountName: site-to-site-vpn
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      tolerations:
+        - key: "node.kubernetes.io/unschedulable"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: strongswan
+          # Using official strongSwan image - alternatively use quay.io/fedora/fedora with libreswan
+          image: docker.io/strongswan/strongswan:6.0.0
+          command: ["/bin/sh", "/etc/ipsec-config/start-vpn.sh"]
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_ADMIN
+                - NET_RAW
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: ipsec-config
+              mountPath: /etc/ipsec-config
+              readOnly: true
+            - name: ipsec-secrets
+              mountPath: /etc/ipsec-secrets
+              readOnly: true
+            - name: run
+              mountPath: /run
+            - name: var-run
+              mountPath: /var/run
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "ipsec status | grep -q ESTABLISHED"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "ipsec status | grep -q ESTABLISHED"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: ipsec-config
+          configMap:
+            name: ipsec-config
+            defaultMode: 0755
+        - name: ipsec-secrets
+          secret:
+            secretName: vpn-credentials
+            optional: true
+            defaultMode: 0600
+        - name: run
+          emptyDir: {}
+        - name: var-run
+          emptyDir: {}

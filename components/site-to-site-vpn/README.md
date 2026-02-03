@@ -1,31 +1,31 @@
 # Site-to-Site VPN Component
 
-AWS Site-to-Site VPN connection for ROSA Non-Prod cluster using strongSwan IPSec in a containerized deployment.
+AWS Site-to-Site VPN connection for OpenShift clusters using strongSwan IPSec in a containerized deployment.
 
 ## Overview
 
-This component provides secure site-to-site VPN connectivity between on-premise networks and the ROSA Non-Prod OpenShift cluster, enabling:
+This component provides secure site-to-site VPN connectivity between on-premise networks and OpenShift clusters, enabling:
 - Access to OpenShift pods and VMs from on-premise
 - Secure IPSec tunnels with certificate-based authentication
 - High availability with dual AWS VPN tunnels
-- Pod network routing (10.128.0.0/14) to on-premise (10.227.112.0/20)
+- Pod network routing to on-premise networks
 
 ## Architecture
 
 ```
-On-Premise Network (10.227.112.0/20)
+On-Premise Network (<your-network-cidr>)
     ↕ IPSec VPN (Certificate-based)
-AWS VPN Connection (vpn-059ee0661e851adf4)
-    ├─ Tunnel 1: 3.232.27.186 (requires endpoint-0 cert)
-    └─ Tunnel 2: 98.94.136.2 ✅ ACTIVE (endpoint-1 cert)
+AWS VPN Connection (<your-vpn-id>)
+    ├─ Tunnel 1: <tunnel1-public-ip> (endpoint-0 cert)
+    └─ Tunnel 2: <tunnel2-public-ip> (endpoint-1 cert)
     ↕
-Transit Gateway (tgw-00279fe0ab1ac255c)
-    ├─ Route: 10.128.0.0/14 → VPN
-    └─ Route: 10.227.112.0/20 → VPN
+Transit Gateway (<your-tgw-id>)
+    ├─ Route: <pod-network> → VPN
+    └─ Route: <remote-network> → VPN
     ↕
-ROSA Non-Prod VPC (vpc-0e9f579449a68a005)
-    ├─ VPC CIDR: 10.227.96.0/20
-    ├─ Pod Network: 10.128.0.0/14
+OpenShift VPC (<your-vpc-id>)
+    ├─ VPC CIDR: <your-vpc-cidr>
+    ├─ Pod Network: <your-pod-network>
     └─ strongSwan VPN Pod (hostNetwork)
 ```
 
@@ -50,15 +50,15 @@ Obtain the following from AWS VPN connection configuration:
 - **CA Certificate Chain** (`ca-chain.pem`)
 
 ### 2. AWS VPN Connection Details
-- **VPN Connection ID**: `vpn-059ee0661e851adf4`
-- **Customer Gateway**: `cgw-0f82cc789449111b7`
-- **Tunnel 1 Endpoint**: `3.232.27.186`
-- **Tunnel 2 Endpoint**: `98.94.136.2`
+- **VPN Connection ID**: `<your-vpn-connection-id>` (from AWS Console)
+- **Customer Gateway**: `<your-customer-gateway-id>` (from AWS Console)
+- **Tunnel 1 Endpoint**: `<tunnel1-public-ip>` (from AWS VPN configuration)
+- **Tunnel 2 Endpoint**: `<tunnel2-public-ip>` (from AWS VPN configuration)
 
 ### 3. Network Configuration
-- **Remote Network CIDR**: `10.227.112.0/20` (on-premise)
-- **Pod Network CIDR**: `10.128.0.0/14` (ROSA Non-Prod pods)
-- **VPC CIDR**: `10.227.96.0/20` (worker nodes)
+- **Remote Network CIDR**: `<your-remote-network>` (on-premise network, e.g., 10.0.0.0/16)
+- **Pod Network CIDR**: `<your-pod-network>` (OpenShift pod network, e.g., 10.128.0.0/14)
+- **VPC CIDR**: `<your-vpc-cidr>` (worker nodes, e.g., 10.10.0.0/16)
 
 ## Installation
 
@@ -81,7 +81,7 @@ oc create secret generic vpn-certificates \
 ### Step 2: Deploy VPN Component
 
 ```bash
-# From Cluster-Config repository root
+# From Cluster-Config or argo-demo repository root
 oc apply -k components/site-to-site-vpn/
 ```
 
@@ -129,7 +129,7 @@ ssh cloud-user@10.130.2.23  # Example VM access
 
 **Traffic Selector**:
 - **Local**: `0.0.0.0/0` (all cluster traffic)
-- **Remote**: `10.227.112.0/20` (on-premise network)
+- **Remote**: `<your-remote-network>` (on-premise network)
 
 ### Deployment Configuration
 
@@ -271,27 +271,21 @@ oc logs -n site-to-site-vpn $POD --tail=100 | grep -i error
 
 ## Dual Tunnel Configuration
 
-**Current Status**: Single tunnel active (Tunnel 2)
-- **Tunnel 1 (3.232.27.186)**: Requires endpoint-0 certificate (currently unavailable)
-- **Tunnel 2 (98.94.136.2)**: Active with endpoint-1 certificate ✅
+**Status**: Both tunnels configured, use appropriate certificate for each
+- **Tunnel 1**: Requires endpoint-0 certificate
+- **Tunnel 2**: Requires endpoint-1 certificate
 
-**For High Availability**: Deploy separate pod for Tunnel 1 with endpoint-0 certificate
-- See: `/docs/VPN-DUAL-TUNNEL-SOLUTION.md`
+**For High Availability**: Deploy separate pod for each tunnel with corresponding certificate, or configure both tunnels in single pod with certificate selection logic.
 
 ## Additional Resources
 
-### Documentation
-- **Full Routing Configuration**: `/docs/VPN-ROUTING-FIX-ACTION-PLAN.md`
-- **TGW Investigation**: `/docs/TGW-PEERING-INVESTIGATION.md`
-- **Palo Alto Configuration**: `/docs/PALO-ALTO-POD-NETWORK-CONFIG.md`
-- **Implementation Summary**: `/docs/VPN-IMPLEMENTATION-SUMMARY.md`
-
-### AWS Resources
-- **VPN Connection**: vpn-059ee0661e851adf4
-- **Transit Gateway**: tgw-00279fe0ab1ac255c
-- **TGW Route Table**: tgw-rtb-0ff564f70c91bf1d5
-- **VPC**: vpc-0e9f579449a68a005
-- **VPC Route Table**: rtb-0467d201a9cbdb89c
+### AWS Resources (Examples)
+Replace with your specific resource IDs:
+- **VPN Connection**: `<your-vpn-connection-id>`
+- **Transit Gateway**: `<your-tgw-id>`
+- **TGW Route Table**: `<your-tgw-route-table-id>`
+- **VPC**: `<your-vpc-id>`
+- **VPC Route Table**: `<your-vpc-route-table-id>`
 
 ### OpenShift Resources
 ```bash
@@ -309,7 +303,7 @@ oc get deployment site-to-site-vpn -n site-to-site-vpn -o yaml
 
 **Issues**:
 - VPN pod crashes: Check certificates and strongSwan logs
-- No connectivity: Verify AWS routing and Palo Alto firewall
+- No connectivity: Verify AWS routing and firewall configuration
 - Tunnel flapping: Check AWS VPN status and DPD timeouts
 
 **Logs**:
@@ -327,6 +321,6 @@ oc logs -n site-to-site-vpn <pod-name> --previous
 ---
 
 **Component Version**: 1.0  
-**Last Updated**: 2026-02-02  
+**Last Updated**: 2026-02-03  
 **strongSwan Version**: Latest from EPEL 9  
-**Maintained by**: OpenShift Team
+**License**: MIT

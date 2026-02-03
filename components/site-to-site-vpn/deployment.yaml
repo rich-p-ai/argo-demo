@@ -35,9 +35,9 @@ spec:
           effect: "NoSchedule"
       containers:
         - name: strongswan
-          # Using official strongSwan image - alternatively use quay.io/fedora/fedora with libreswan
-          image: docker.io/strongswan/strongswan:6.0.0
-          command: ["/bin/sh", "/etc/ipsec-config/start-vpn.sh"]
+          # UBI9: strongSwan installed at startup from EPEL (Red Hat registry only)
+          image: registry.access.redhat.com/ubi9/ubi:latest
+          command: ["/bin/bash", "/etc/ipsec-config/start-vpn.sh"]
           securityContext:
             privileged: true
             capabilities:
@@ -47,17 +47,17 @@ spec:
                 - NET_RAW
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 200m
+              memory: 512Mi
             limits:
-              cpu: 500m
-              memory: 256Mi
+              cpu: 1000m
+              memory: 1Gi
           volumeMounts:
             - name: ipsec-config
               mountPath: /etc/ipsec-config
               readOnly: true
-            - name: ipsec-secrets
-              mountPath: /etc/ipsec-secrets
+            - name: vpn-certs
+              mountPath: /etc/vpn-certs
               readOnly: true
             - name: run
               mountPath: /run
@@ -68,27 +68,26 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - "ipsec status | grep -q ESTABLISHED"
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            failureThreshold: 3
+                - "ps aux | grep -q '[c]haron'"
+            initialDelaySeconds: 180
+            periodSeconds: 60
+            failureThreshold: 5
           readinessProbe:
             exec:
               command:
                 - /bin/sh
                 - -c
-                - "ipsec status | grep -q ESTABLISHED"
-            initialDelaySeconds: 30
-            periodSeconds: 10
+                - "ps aux | grep -q '[c]haron'"
+            initialDelaySeconds: 120
+            periodSeconds: 30
       volumes:
         - name: ipsec-config
           configMap:
             name: ipsec-config
             defaultMode: 0755
-        - name: ipsec-secrets
+        - name: vpn-certs
           secret:
-            secretName: vpn-credentials
-            optional: true
+            secretName: vpn-certificates
             defaultMode: 0600
         - name: run
           emptyDir: {}

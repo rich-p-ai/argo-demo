@@ -8,13 +8,15 @@ data:
   # strongSwan ipsec.conf for AWS Site-to-Site VPN (non-prod)
   # VPN Connection: vpn-059ee0661e851adf4
   # Customer Gateway: cgw-0f82cc789449111b7
+  # Ref: certs/non-prod/vpn-059ee0661e851adf49 1.txt
   ipsec.conf: |
     config setup
         charondebug="ike 2, knl 2, cfg 2, net 2, esp 2, dmn 2, mgr 2"
         uniqueids=no
 
     conn %default
-        keyexchange=ikev2
+        keyexchange=ikev1
+        # Match AWS: AES128, SHA1, DH group2 (doc minimum)
         ike=aes128-sha1-modp1024!
         esp=aes128-sha1-modp1024!
         ikelifetime=28800s
@@ -24,71 +26,103 @@ data:
         dpdtimeout=30s
         rekey=yes
         reauth=no
-        authby=secret
+        # Certificate-based authentication
+        authby=rsasig
+        leftcert=client-cert.pem
         left=%defaultroute
-        leftid=%any
         leftsubnet=0.0.0.0/0
-        rightsubnet=10.222.155.0/24
+        rightsubnet=10.227.112.0/20
         auto=start
         closeaction=restart
         type=tunnel
         installpolicy=yes
+        aggressive=no
 
     # AWS VPN Tunnel 1 (Primary) - 3.232.27.186
     conn aws-vpn-tunnel1
         right=3.232.27.186
-        rightid=3.232.27.186
+        rightid="CN=vpn-059ee0661e851adf4.endpoint-0"
+        leftid="vpn-059ee0661e851adf4.endpoint-0"
         leftsourceip=169.254.43.134
         mark=100
+        # Prioritize tunnel 1 as primary
+        reqid=1
 
-    # AWS VPN Tunnel 2 (Backup) - 98.94.136.2
+    # AWS VPN Tunnel 2 (Secondary) - 98.94.136.2
     conn aws-vpn-tunnel2
         right=98.94.136.2
-        rightid=98.94.136.2
+        rightid="CN=vpn-059ee0661e851adf4.endpoint-1"
+        leftid="vpn-059ee0661e851adf4.endpoint-0"
         leftsourceip=169.254.118.14
         mark=200
+        # Configure tunnel 2 with different reqid for parallel operation
+        reqid=2
 
-  # IPSec secrets reference - actual PSK loaded from secret
+  # IPSec secrets - private key (decrypted)
   ipsec.secrets: |
-    # Secrets loaded from mounted secret file
-    include /etc/ipsec.d/secrets/*.secrets
+    # Private key for certificate authentication (no passphrase needed)
+    : RSA client-key.pem
 
-  # Startup script for the VPN container
+  # Startup script: install strongSwan from EPEL on UBI9 then start
   start-vpn.sh: |
-    #!/bin/sh
+    #!/bin/bash
     set -e
+    export PATH=$PATH:/usr/sbin:/sbin:/usr/bin:/bin:/usr/libexec/ipsec
 
     echo "Starting Site-to-Site VPN Client..."
     echo "================================================"
 
+    # Install strongSwan from EPEL on UBI9 (no strongSwan in RH default repos)
+    echo "Installing strongSwan from EPEL..."
+    dnf install -y --nodocs https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm 2>&1 | tail -3 || true
+    dnf install -y --nodocs strongswan procps-ng 2>&1 | tail -5 || true
+
+    # Find starter binary (reads ipsec.conf and manages charon)
+    STARTER_BIN=$(find /usr -name starter -type f 2>/dev/null | head -1)
+    if [ -n "$STARTER_BIN" ]; then
+      echo "Found starter at: $STARTER_BIN"
+    else
+      echo "ERROR: starter binary not found after install."
+      echo "Installed strongSwan files:"
+      rpm -ql strongswan 2>&1 | head -30
+      exit 1
+    fi
+
     # Enable IP forwarding
     echo "Configuring kernel parameters..."
-    sysctl -w net.ipv4.ip_forward=1 || true
-    sysctl -w net.ipv4.conf.all.accept_redirects=0 || true
-    sysctl -w net.ipv4.conf.all.send_redirects=0 || true
-    sysctl -w net.ipv4.conf.default.rp_filter=0 || true
-    sysctl -w net.ipv4.conf.all.rp_filter=0 || true
+    /usr/sbin/sysctl -w net.ipv4.ip_forward=1 2>&1 || true
+    /usr/sbin/sysctl -w net.ipv4.conf.all.accept_redirects=0 2>&1 || true
+    /usr/sbin/sysctl -w net.ipv4.conf.all.send_redirects=0 2>&1 || true
+    /usr/sbin/sysctl -w net.ipv4.conf.default.rp_filter=0 2>&1 || true
+    /usr/sbin/sysctl -w net.ipv4.conf.all.rp_filter=0 2>&1 || true
 
     # Ensure directories exist
-    mkdir -p /etc/ipsec.d/secrets
-    mkdir -p /etc/swanctl/conf.d
+    mkdir -p /etc/strongswan/ipsec.d/private
+    mkdir -p /etc/strongswan/ipsec.d/certs
+    mkdir -p /etc/strongswan/ipsec.d/cacerts
 
     # Copy configuration files
     echo "Copying IPSec configuration..."
-    cp /etc/ipsec-config/ipsec.conf /etc/ipsec.conf
-    cp /etc/ipsec-config/ipsec.secrets /etc/ipsec.secrets
+    cp /etc/ipsec-config/ipsec.conf /etc/strongswan/ipsec.conf
+    cp /etc/ipsec-config/ipsec.secrets /etc/strongswan/ipsec.secrets
 
-    # Copy the PSK secret if mounted
-    if [ -f /etc/ipsec-secrets/tunnel1.secrets ]; then
-        echo "Loading VPN credentials..."
-        cp /etc/ipsec-secrets/tunnel1.secrets /etc/ipsec.d/secrets/
-        chmod 600 /etc/ipsec.d/secrets/tunnel1.secrets
+    # Copy certificates if mounted
+    if [ -f /etc/vpn-certs/client-cert.pem ]; then
+        echo "Loading VPN certificates..."
+        cp /etc/vpn-certs/client-cert.pem /etc/strongswan/ipsec.d/certs/
+        cp /etc/vpn-certs/client-key.pem /etc/strongswan/ipsec.d/private/
+        cp /etc/vpn-certs/ca-chain.pem /etc/strongswan/ipsec.d/cacerts/
+        chmod 600 /etc/strongswan/ipsec.d/private/client-key.pem
+        chmod 644 /etc/strongswan/ipsec.d/certs/client-cert.pem
+        chmod 644 /etc/strongswan/ipsec.d/cacerts/ca-chain.pem
+        echo "✓ Certificates loaded"
     else
-        echo "WARNING: VPN credentials secret not found!"
-        echo "Create the 'vpn-credentials' secret with tunnel1.secrets"
+        echo "ERROR: VPN certificates not found!"
+        echo "Create the 'vpn-certificates' secret with client-cert.pem, client-key.pem, ca-chain.pem"
+        exit 1
     fi
 
-    # Start strongSwan charon daemon
-    echo "Starting strongSwan IPSec daemon..."
+    # Start strongSwan with starter (reads ipsec.conf)
+    echo "Starting strongSwan with starter (ipsec.conf mode)..."
     echo "================================================"
-    exec charon-systemd || exec ipsec start --nofork
+    exec $STARTER_BIN --nofork

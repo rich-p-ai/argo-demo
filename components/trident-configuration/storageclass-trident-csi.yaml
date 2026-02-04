@@ -8,7 +8,7 @@ metadata:
 provisioner: csi.trident.netapp.io
 parameters:
   backendType: ontap-nas
-  fsType: ext4
+  # Note: fsType is not applicable for NFS (ontap-nas) - only used for block storage (iSCSI/SAN)
 allowVolumeExpansion: true
 reclaimPolicy: Retain
 volumeBindingMode: Immediate

@@ -1,0 +1,185 @@
+---
+# Migration Plan Template for Windows VMs
+# Use this template to create migration plans for VMware to OpenShift Virtualization
+
+apiVersion: forklift.konveyor.io/v1beta1
+kind: Plan
+metadata:
+  name: <vm-name>-migration
+  namespace: openshift-mtv
+  labels:
+    migration-wave: <wave-name>
+    vcenter: <vcenter-name>  # e.g., vmc or nymsut03
+    os-type: windows
+    environment: non-prod  # or prod
+  annotations:
+    description: "Migration plan for <VM-NAME>"
+    created-date: "2026-02-11"
+    application: "<app-name>"
+
+spec:
+  # ============================================================================
+  # PROVIDER CONFIGURATION
+  # ============================================================================
+  provider:
+    source:
+      name: vmc  # or nymsut03-standalone for on-prem
+      namespace: openshift-mtv
+    destination:
+      name: host
+      namespace: openshift-mtv
+
+  # ============================================================================
+  # TARGET NAMESPACE
+  # ============================================================================
+  # Windows VMs: windows-non-prod or windows-prod
+  # Linux VMs: vm-dev-<app> or vm-prod-<app>
+  targetNamespace: windows-non-prod
+
+  # ============================================================================
+  # NETWORK AND STORAGE MAPPINGS
+  # ============================================================================
+  map:
+    network:
+      name: windows-non-prod  # NetworkMap name
+      namespace: openshift-mtv
+    storage:
+      name: windows-non-prod  # StorageMap name
+      namespace: openshift-mtv
+
+  # ============================================================================
+  # VM SELECTION
+  # ============================================================================
+  vms:
+    - id: vm-XXXXX  # ⚠️ REQUIRED: Get VM ID from vCenter or MTV UI
+      name: <VM-NAME>
+
+  # ============================================================================
+  # MIGRATION SETTINGS
+  # ============================================================================
+  # Migration type
+  warm: false  # false = cold migration (VM must be powered off)
+              # true = warm migration (live migration with cutover)
+
+  # IP preservation
+  preserveStaticIPs: false  # Usually false for new environment
+
+  # Power state after migration
+  targetPowerState: "off"  # "off" or "on"
+  
+  # Migration type
+  type: cold  # cold or warm
+
+  # ============================================================================
+  # ADVANCED SETTINGS
+  # ============================================================================
+  # Shared disks
+  migrateSharedDisks: true
+
+  # PVC naming
+  pvcNameTemplateUseGenerateName: true
+
+  # Pre-flight inspection
+  runPreflightInspection: true
+
+  # Guest conversion
+  # ⚠️ IMPORTANT: Set to true to skip conversion if Windows has dirty filesystem
+  # (Fast Startup/Hibernation issues)
+  skipGuestConversion: true  # true = skip conversion (use SATA/e1000e)
+                             # false = convert drivers (use virtio - better performance)
+
+  # Compatibility mode
+  useCompatibilityMode: true
+
+---
+# NetworkMap Template
+apiVersion: forklift.konveyor.io/v1beta1
+kind: NetworkMap
+metadata:
+  name: <vm-name>-networkmap
+  namespace: openshift-mtv
+  labels:
+    migration-wave: <wave-name>
+    vcenter: <vcenter-name>
+  annotations:
+    description: "Network mapping for <VM-NAME>"
+
+spec:
+  provider:
+    source:
+      name: vmc  # or nymsut03-standalone
+      namespace: openshift-mtv
+    destination:
+      name: host
+      namespace: openshift-mtv
+
+  map:
+    # Map VMware network to OpenShift network
+    # For Windows VMs on VLAN 244:
+    - source:
+        name: L2E_Vlan-244__DevWin_-244-BE596813--1458477983
+      destination:
+        type: pod  # pod network for primary NIC
+        # OR for secondary NIC:
+        # type: multus
+        # namespace: windows-non-prod
+        # name: windows-non-prod
+
+---
+# StorageMap Template
+apiVersion: forklift.konveyor.io/v1beta1
+kind: StorageMap
+metadata:
+  name: <vm-name>-storagemap
+  namespace: openshift-mtv
+  labels:
+    migration-wave: <wave-name>
+    vcenter: <vcenter-name>
+  annotations:
+    description: "Storage mapping for <VM-NAME>"
+
+spec:
+  provider:
+    source:
+      name: vmc  # or nymsut03-standalone
+      namespace: openshift-mtv
+    destination:
+      name: host
+      namespace: openshift-mtv
+
+  map:
+    # Map VMware datastore to OpenShift storage class
+    - source:
+        name: WorkloadDatastore (1)  # VMware datastore name
+      destination:
+        storageClass: ontap-san-economy  # OpenShift storage class
+
+---
+# USAGE INSTRUCTIONS:
+#
+# 1. Copy this template and replace placeholders:
+#    - <vm-name>: lowercase VM name (e.g., nymsdv297)
+#    - <VM-NAME>: uppercase VM name (e.g., NYMSDV297)
+#    - <wave-name>: migration wave identifier
+#    - <vcenter-name>: vmc or nymsut03
+#    - <app-name>: application name
+#    - vm-XXXXX: actual VM ID from vCenter
+#
+# 2. Update network and storage source names to match VMware
+#
+# 3. Apply in order:
+#    kubectl apply -f <storagemap>.yaml
+#    kubectl apply -f <networkmap>.yaml
+#    kubectl apply -f <plan>.yaml
+#
+# 4. Monitor migration:
+#    oc get plan <plan-name> -n openshift-mtv -w
+#
+# 5. Check logs:
+#    oc logs -n <target-namespace> <conversion-pod> --follow
+#
+# NOTES:
+# - Set skipGuestConversion: true for Windows VMs with dirty filesystems
+# - Cold migration requires VM to be powered off before starting
+# - Warm migration allows live migration with minimal downtime
+# - Use pod network for primary NIC, multus for secondary NICs

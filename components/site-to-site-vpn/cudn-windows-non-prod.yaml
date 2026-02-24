@@ -1,0 +1,27 @@
+---
+# ClusterUserDefinedNetwork for Windows VMs
+# Network: 10.227.128.0/21 (outside pod network 10.132.0.0/14)
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: windows-non-prod
+  annotations:
+    description: "Secondary network for Windows VMs - Layer 2 without IPAM"
+    network.openshift.io/purpose: "vm-migration-windows"
+spec:
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+          - windows-non-prod
+          - openshift-mtv
+          - vm-migrations
+          - vpn-infra
+  network:
+    topology: Layer2
+    layer2:
+      role: Secondary
+      ipam:
+        mode: Disabled
+      mtu: 1500

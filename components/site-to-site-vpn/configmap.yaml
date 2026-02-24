@@ -5,9 +5,10 @@ metadata:
   name: ipsec-config
   namespace: site-to-site-vpn
 data:
-  # strongSwan ipsec.conf for AWS Site-to-Site VPN
-  # VPN Connection: <your-vpn-connection-id>
-  # Customer Gateway: <your-customer-gateway-id>
+  # strongSwan ipsec.conf for AWS Site-to-Site VPN (non-prod)
+  # VPN Connection: vpn-059ee0661e851adf4
+  # Customer Gateway: cgw-0f82cc789449111b7
+  # Ref: certs/non-prod/vpn-059ee0661e851adf49 1.txt
   ipsec.conf: |
     config setup
         charondebug="ike 2, knl 2, cfg 2, net 2, esp 2, dmn 2, mgr 2"
@@ -30,29 +31,33 @@ data:
         leftcert=client-cert.pem
         left=%defaultroute
         leftsubnet=0.0.0.0/0
-        rightsubnet=<your-remote-network-cidr>  # Example: 10.0.0.0/16
+        # Canon corporate networks - allows VPN access from all Canon offices
+        # Includes: 10.63.0.0/16, 10.68.0.0/16, 10.99.0.0/16, 10.110.0.0/16,
+        #           10.140.0.0/16, 10.141.0.0/16 (NY office), 10.158.0.0/16,
+        #           10.227.112.0/20 (original on-prem)
+        rightsubnet=10.63.0.0/16,10.68.0.0/16,10.99.0.0/16,10.110.0.0/16,10.140.0.0/16,10.141.0.0/16,10.158.0.0/16,10.227.112.0/20
         auto=start
         closeaction=restart
         type=tunnel
         installpolicy=yes
         aggressive=no
 
-    # AWS VPN Tunnel 1 (Primary)
+    # AWS VPN Tunnel 1 (Primary) - 3.232.27.186
     conn aws-vpn-tunnel1
-        right=<aws-tunnel1-public-ip>  # From AWS VPN configuration
-        rightid="CN=<your-vpn-id>.endpoint-0"
-        leftid="<your-vpn-id>.endpoint-0"
-        leftsourceip=<tunnel1-inside-ip>  # Example: 169.254.10.2
+        right=3.232.27.186
+        rightid="CN=vpn-059ee0661e851adf4.endpoint-0"
+        leftid="vpn-059ee0661e851adf4.endpoint-0"
+        leftsourceip=169.254.43.134
         mark=100
         # Prioritize tunnel 1 as primary
         reqid=1
 
-    # AWS VPN Tunnel 2 (Secondary)
+    # AWS VPN Tunnel 2 (Secondary) - 98.94.136.2
     conn aws-vpn-tunnel2
-        right=<aws-tunnel2-public-ip>  # From AWS VPN configuration
-        rightid="CN=<your-vpn-id>.endpoint-1"
-        leftid="<your-vpn-id>.endpoint-0"
-        leftsourceip=<tunnel2-inside-ip>  # Example: 169.254.10.6
+        right=98.94.136.2
+        rightid="CN=vpn-059ee0661e851adf4.endpoint-1"
+        leftid="vpn-059ee0661e851adf4.endpoint-0"
+        leftsourceip=169.254.118.14
         mark=200
         # Configure tunnel 2 with different reqid for parallel operation
         reqid=2
@@ -94,6 +99,16 @@ data:
     /usr/sbin/sysctl -w net.ipv4.conf.all.send_redirects=0 2>&1 || true
     /usr/sbin/sysctl -w net.ipv4.conf.default.rp_filter=0 2>&1 || true
     /usr/sbin/sysctl -w net.ipv4.conf.all.rp_filter=0 2>&1 || true
+
+    # Add route to windows-non-prod CUDN (10.227.128.0/21) via gateway VM
+    echo "Adding route to windows-non-prod CUDN..."
+    GATEWAY_VM_IP="10.135.0.25"  # Updated: cudn-gateway pod network IP
+    ip route add 10.227.128.0/21 via $GATEWAY_VM_IP dev eth0 2>/dev/null || true
+    if ip route show | grep -q "10.227.128.0/21"; then
+        echo "✓ Route added: 10.227.128.0/21 via $GATEWAY_VM_IP"
+    else
+        echo "⚠ Could not add route (may already exist or gateway VM not ready)"
+    fi
 
     # Ensure directories exist
     mkdir -p /etc/strongswan/ipsec.d/private

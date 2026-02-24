@@ -1,0 +1,306 @@
+---
+# VPN Gateway VM for windows-non-prod CUDN (10.227.128.0/21)
+# This VM acts as router/gateway at 10.227.128.1
+# Based on IPsec VM design but simplified for routing only
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: cudn-gateway
+  namespace: windows-non-prod
+  labels:
+    app: cudn-gateway
+    role: network-router
+  annotations:
+    description: "Gateway/Router for windows-non-prod CUDN to site-to-site VPN"
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: cudn-gateway-root
+      spec:
+        pvc:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: gp3-csi
+        source:
+          registry:
+            url: docker://quay.io/containerdisks/centos-stream:9
+  template:
+    metadata:
+      labels:
+        app: cudn-gateway
+        role: network-router
+    spec:
+      domain:
+        cpu:
+          cores: 2
+          sockets: 1
+          threads: 1
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: root
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            # Primary interface - pod network (for VPN pod connectivity)
+            - name: default
+              masquerade: {}
+            # Secondary interface - windows-non-prod CUDN (gateway at 10.227.128.1)
+            - name: cudn
+              bridge: {}
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: 2
+          limits:
+            memory: 4Gi
+            cpu: 2
+      networks:
+        - name: default
+          pod: {}
+        - name: cudn
+          multus:
+            networkName: windows-non-prod
+      volumes:
+        - name: root
+          dataVolume:
+            name: cudn-gateway-root
+        - name: cloudinit
+          cloudInitNoCloud:
+            secretRef:
+              name: cudn-gateway-cloudinit
+---
+# Cloud-init configuration for CUDN Gateway VM
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cudn-gateway-cloudinit
+  namespace: windows-non-prod
+  annotations:
+    description: "Cloud-init for CUDN gateway VM - full routing and NAT setup"
+type: Opaque
+stringData:
+  userdata: |
+    #cloud-config
+    # CUDN Gateway VM Configuration
+    # Configures VM as router between windows-non-prod CUDN and pod network
+    
+    # Root password
+    password: Canon123!
+    chpasswd:
+      expire: false
+    ssh_pwauth: true
+    
+    # SSH keys
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILC4UQZlAjU0yNNNn9WypjpZbxUVr1Pu4x8Aiig405mK cudn-gateway
+    
+    # Install required packages
+    packages:
+      - iptables
+      - iptables-services
+      - tcpdump
+      - net-tools
+      - bind-utils
+      - traceroute
+      - vim
+      - curl
+      - wget
+      - nmap
+      - iperf3
+    
+    # System configuration for routing
+    bootcmd:
+      - echo "net.ipv4.ip_forward=1" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.all.rp_filter=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.default.rp_filter=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.all.accept_redirects=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.default.accept_redirects=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.all.send_redirects=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.default.send_redirects=0" >> /etc/sysctl.d/99-gateway.conf
+      - sysctl --system
+    
+    write_files:
+      # Network configuration for eth1 (CUDN interface)
+      - path: /etc/NetworkManager/system-connections/eth1.nmconnection
+        owner: root:root
+        permissions: '0600'
+        content: |
+          [connection]
+          id=eth1
+          type=ethernet
+          interface-name=eth1
+          autoconnect=true
+          
+          [ipv4]
+          method=manual
+          address1=10.227.128.1/21
+          dns=10.0.0.10;10.0.0.11
+          may-fail=false
+          
+          [ipv6]
+          method=disabled
+      
+      # Gateway routing configuration script
+      - path: /usr/local/bin/configure-gateway.sh
+        owner: root:root
+        permissions: '0755'
+        content: |
+          #!/bin/bash
+          set -e
+          
+          echo "=========================================="
+          echo "CUDN Gateway Configuration"
+          echo "=========================================="
+          
+          # Wait for interfaces
+          for i in {1..30}; do
+            if ip link show eth1 &>/dev/null; then
+              echo "✓ eth1 interface found"
+              break
+            fi
+            sleep 2
+          done
+          
+          # Ensure eth1 has correct IP
+          if ! ip addr show eth1 | grep -q "10.227.128.1/21"; then
+            echo "Configuring eth1 IP address..."
+            ip addr flush dev eth1
+            ip addr add 10.227.128.1/21 dev eth1
+            ip link set eth1 up
+          fi
+          
+          # Enable IP forwarding
+          echo "Enabling IP forwarding..."
+          sysctl -w net.ipv4.ip_forward=1
+          sysctl -w net.ipv4.conf.all.rp_filter=0
+          sysctl -w net.ipv4.conf.default.rp_filter=0
+          
+          # Stop firewalld (using iptables instead)
+          systemctl stop firewalld 2>/dev/null || true
+          systemctl disable firewalld 2>/dev/null || true
+          
+          # Configure iptables
+          echo "Configuring iptables NAT and forwarding..."
+          
+          # Flush existing rules
+          iptables -t nat -F
+          iptables -F FORWARD
+          
+          # NAT for CUDN traffic going to external networks via eth0
+          iptables -t nat -A POSTROUTING -s 10.227.128.0/21 ! -d 10.227.128.0/21 -o eth0 -j MASQUERADE
+          
+          # Allow forwarding from CUDN to pod network (outbound)
+          iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+          # Allow inbound from on-prem (VPN) to CUDN VMs - required for on-prem → VM (e.g. RDP)
+          iptables -A FORWARD -i eth0 -o eth1 -d 10.227.128.0/21 -j ACCEPT
+          # Allow return traffic for connections initiated from VMs
+          iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+          
+          # Allow VM-to-VM forwarding within CUDN
+          iptables -A FORWARD -i eth1 -o eth1 -j ACCEPT
+          
+          # Drop invalid packets
+          iptables -A FORWARD -m state --state INVALID -j DROP
+          
+          # Save iptables rules
+          iptables-save > /etc/sysconfig/iptables
+          
+          # Enable iptables service
+          systemctl enable iptables
+          systemctl start iptables
+          
+          echo "✓ Gateway configuration complete!"
+          echo ""
+          echo "=== Status ==="
+          echo "Hostname: $(hostname)"
+          ip -br addr show
+          echo ""
+          echo "IP Forwarding: $(sysctl -n net.ipv4.ip_forward)"
+          echo ""
+          echo "NAT Rules:"
+          iptables -t nat -L POSTROUTING -n -v | head -5
+          echo ""
+          echo "Forwarding Rules:"
+          iptables -L FORWARD -n -v | head -10
+          echo "=========================================="
+      
+      # Status check script
+      - path: /usr/local/bin/gateway-status.sh
+        owner: root:root
+        permissions: '0755'
+        content: |
+          #!/bin/bash
+          echo "=== CUDN Gateway Status ==="
+          echo "Hostname: $(hostname)"
+          echo "Uptime: $(uptime -p)"
+          echo ""
+          echo "=== Network Interfaces ==="
+          ip -br addr show
+          echo ""
+          echo "=== Routing Table ==="
+          ip route show
+          echo ""
+          echo "=== IP Forwarding ==="
+          sysctl net.ipv4.ip_forward
+          echo ""
+          echo "=== NAT Rules (with packet counters) ==="
+          iptables -t nat -L POSTROUTING -n -v
+          echo ""
+          echo "=== Forwarding Rules (with packet counters) ==="
+          iptables -L FORWARD -n -v
+          echo ""
+          echo "=== Connectivity Tests ==="
+          echo -n "Internet (8.8.8.8): "
+          ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 && echo "✓ OK" || echo "✗ FAIL"
+          echo -n "Gateway IP (10.227.128.1): "
+          ip addr show eth1 | grep -q "10.227.128.1" && echo "✓ OK" || echo "✗ FAIL"
+          echo "=========================================="
+    
+    runcmd:
+      # Reload NetworkManager to pick up eth1 config
+      - sleep 5
+      - nmcli connection reload
+      - nmcli connection up eth1 || true
+      
+      # Run gateway configuration
+      - sleep 10
+      - /usr/local/bin/configure-gateway.sh | tee /var/log/gateway-config.log
+      
+      # Create motd
+      - |
+        cat > /etc/motd <<'EOF'
+        ==========================================
+        CUDN Gateway VM
+        ==========================================
+        Role: Router for windows-non-prod CUDN
+        Gateway IP: 10.227.128.1/21
+        
+        Commands:
+          gateway-status.sh  - Check gateway status
+          ip addr show       - Show interfaces
+          ip route show      - Show routes
+          iptables -t nat -L -n -v  - Show NAT rules
+        
+        Logs:
+          /var/log/gateway-config.log
+        ==========================================
+        EOF
+    
+    final_message: |
+      ==========================================
+      CUDN Gateway VM Ready
+      ==========================================
+      Gateway IP: 10.227.128.1/21
+      Pod Network: $(ip -4 addr show eth0 | grep inet | awk '{print $2}')
+      
+      Run: gateway-status.sh
+      ==========================================

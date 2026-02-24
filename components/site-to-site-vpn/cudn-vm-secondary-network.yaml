@@ -1,0 +1,98 @@
+---
+# ClusterUserDefinedNetwork for VM secondary networks with static IP support
+# This CUDN targets all VM migration namespaces to provide a secondary network
+# with manual IP assignment capability
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: vm-secondary-network
+  annotations:
+    description: "Secondary network for VMs with static IP support"
+    network.openshift.io/purpose: "vm-static-ip-secondary"
+spec:
+  # Target VM namespaces that need secondary networks with static IPs
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+          - windows-non-prod
+          - vm-migrations
+          - openshift-mtv
+          - vpn-infra
+  network:
+    topology: Layer2  # REQUIRED: Must specify topology
+    layer2:
+      role: Secondary
+      subnets:
+        # Secondary network CIDR for static IP assignment
+        # This network is for VMs that need custom/static IPs
+        # Separate from the existing bridge-based networks
+        - "192.168.10.0/24"
+      # ipamLifecycle Persistent allows static IP assignment
+      # VMs can configure IPs manually on this interface
+      ipamLifecycle: Persistent
+      mtu: 1500
+---
+# NetworkAttachmentDefinition for windows-non-prod namespace
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vm-secondary-network
+  namespace: windows-non-prod
+  annotations:
+    description: "Secondary network attachment with static IP support for Windows VMs"
+    k8s.v1.cni.cncf.io/resourceName: k8s.ovn.org/vm-secondary-network
+spec:
+  config: |
+    {
+      "cniVersion": "0.4.0",
+      "name": "vm-secondary-network",
+      "type": "ovn-k8s-cni-overlay",
+      "netAttachDefName": "windows-non-prod/vm-secondary-network",
+      "topology": "layer2",
+      "mtu": 1500,
+      "ipam": {}
+    }
+---
+# NetworkAttachmentDefinition for vm-migrations namespace
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vm-secondary-network
+  namespace: vm-migrations
+  annotations:
+    description: "Secondary network attachment with static IP support for VM migrations"
+    k8s.v1.cni.cncf.io/resourceName: k8s.ovn.org/vm-secondary-network
+spec:
+  config: |
+    {
+      "cniVersion": "0.4.0",
+      "name": "vm-secondary-network",
+      "type": "ovn-k8s-cni-overlay",
+      "netAttachDefName": "vm-migrations/vm-secondary-network",
+      "topology": "layer2",
+      "mtu": 1500,
+      "ipam": {}
+    }
+---
+# NetworkAttachmentDefinition for vpn-infra namespace
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vm-secondary-network
+  namespace: vpn-infra
+  annotations:
+    description: "Secondary network attachment with static IP support for VPN infrastructure"
+    k8s.v1.cni.cncf.io/resourceName: k8s.ovn.org/vm-secondary-network
+spec:
+  config: |
+    {
+      "cniVersion": "0.4.0",
+      "name": "vm-secondary-network",
+      "type": "ovn-k8s-cni-overlay",
+      "netAttachDefName": "vpn-infra/vm-secondary-network",
+      "topology": "layer2",
+      "mtu": 1500,
+      "ipam": {}
+    }

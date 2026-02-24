@@ -1,0 +1,57 @@
+---
+apiVersion: forklift.konveyor.io/v1beta1
+kind: Plan
+metadata:
+  name: nymsdv301-remigration
+  namespace: openshift-mtv
+  labels:
+    environment: non-prod
+    migration-wave: wave-0-refresh
+    os-type: windows
+    vcenter: vmc
+    vm-name: nymsdv301
+  annotations:
+    created-date: "2026-02-10"
+    description: "Re-migration of NYMSDV301 to capture latest data from vSphere"
+    migration-type: "Warm migration with VDDK"
+    os-type: "Windows Server"
+    source-network: "L2E_Vlan-244__DevWin_-244-BE596813--1458477983"
+    target-namespace: "windows-non-prod"
+    vcenter: "VMC (VMware Cloud on AWS)"
+    reason: "Capture most current data from source VM"
+    static-ip: "10.132.104.11"
+spec:
+  # Source and destination providers
+  provider:
+    source:
+      name: vmc
+      namespace: openshift-mtv
+    destination:
+      name: host
+      namespace: openshift-mtv
+  
+  # Target namespace for migrated VM
+  targetNamespace: windows-non-prod
+  
+  # Network and storage mappings
+  map:
+    network:
+      name: windows-non-prod
+      namespace: openshift-mtv
+    storage:
+      name: windows-non-prod
+      namespace: openshift-mtv
+  
+  # VMs to migrate
+  vms:
+    - id: vm-5966
+      name: NYMSDV301
+  
+  # Migration options
+  warm: false                         # Cold migration - VM will be powered off
+  useCompatibilityMode: true          # Use VDDK for disk transfer
+  skipGuestConversion: false          # Run guest conversion (virtio drivers)
+  preserveStaticIPs: false            # We'll configure static IP post-migration
+  migrateSharedDisks: true            # Migrate all disks
+  runPreflightInspection: false       # Skip preflight - guest inspection may fail
+  pvcNameTemplateUseGenerateName: true # Generate unique PVC names

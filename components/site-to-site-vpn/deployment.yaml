@@ -11,7 +11,7 @@ metadata:
   annotations:
     description: "Site-to-Site VPN client connecting to AWS Transit Gateway"
 spec:
-  replicas: 1
+  replicas: 0
   strategy:
     type: Recreate
   selector:

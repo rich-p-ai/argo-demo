@@ -1,0 +1,16 @@
+---
+# Namespace for VPN infrastructure and VMs
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vpn-infra
+  labels:
+    # Required label for CUDN namespaceSelector
+    kubernetes.io/metadata.name: vpn-infra
+    # OpenShift labels
+    openshift.io/cluster-monitoring: "true"
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+  annotations:
+    description: "VPN infrastructure namespace for IPSec VMs and site-to-site connectivity"

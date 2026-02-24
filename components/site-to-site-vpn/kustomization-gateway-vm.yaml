@@ -1,0 +1,24 @@
+---
+# Kustomization for Gateway VM
+# This gateway VM bridges the windows-non-prod CUDN (10.227.128.0/21) to the pod network
+# enabling the site-to-site VPN to route traffic to Windows VMs
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: vpn-gateway-vm
+  annotations:
+    description: "Gateway VM for windows-non-prod CUDN routing to site-to-site VPN"
+
+namespace: windows-non-prod
+
+resources:
+  # Gateway VM with dual interfaces (pod network + CUDN)
+  - vpn-gateway-vm.yaml
+
+commonLabels:
+  app.kubernetes.io/name: vpn-gateway
+  app.kubernetes.io/component: network-gateway
+  app.kubernetes.io/part-of: site-to-site-vpn
+  app.kubernetes.io/managed-by: kustomize

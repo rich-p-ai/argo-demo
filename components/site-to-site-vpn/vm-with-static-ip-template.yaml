@@ -1,0 +1,157 @@
+---
+# Example VM Template with Static IP via Cloud-Init
+# This requires CloudBase-Init to be installed in Windows image
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: nymsdv297
+  namespace: windows-non-prod
+  labels:
+    app: windows-vm
+    static-ip: "true"
+    ip: "10.132.104.10"
+spec:
+  running: false  # Start manually after creation
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: nymsdv297
+    spec:
+      domain:
+        cpu:
+          cores: 4
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+            - name: net-0
+              bridge: {}
+        resources:
+          requests:
+            memory: 8Gi
+      networks:
+        - name: default
+          pod: {}
+        - name: net-0
+          multus:
+            networkName: windows-non-prod
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: nymsdv297-disk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              write_files:
+                - path: C:\configure-static-ip.ps1
+                  permissions: '0644'
+                  content: |
+                    # Configure Static IP on net-0 interface
+                    $InterfaceName = (Get-NetAdapter | Where-Object {$_.MacAddress -eq "00:50:56:bd:4e:b1"}).Name
+                    
+                    # Remove DHCP
+                    Set-NetIPInterface -InterfaceAlias $InterfaceName -Dhcp Disabled
+                    
+                    # Set Static IP
+                    New-NetIPAddress -InterfaceAlias $InterfaceName `
+                      -IPAddress "10.132.104.10" `
+                      -PrefixLength 22 `
+                      -DefaultGateway "10.132.104.1" `
+                      -ErrorAction SilentlyContinue
+                    
+                    # Set DNS
+                    Set-DnsClientServerAddress -InterfaceAlias $InterfaceName `
+                      -ServerAddresses ("10.132.104.53","8.8.8.8")
+                    
+                    # Enable RDP
+                    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+                      -name "fDenyTSConnections" -value 0
+                    
+                    # Configure Firewall
+                    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+                    Enable-NetFirewallRule -DisplayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+                    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True
+                    
+                    # Set hostname
+                    Rename-Computer -NewName "NYMSDV297" -Force -ErrorAction SilentlyContinue
+                    
+                    # Log completion
+                    "Static IP configured: 10.132.104.10" | Out-File C:\static-ip-config.log
+              
+              runcmd:
+                - powershell.exe -ExecutionPolicy Bypass -File C:\configure-static-ip.ps1
+---
+# Second VM Example
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: nymsdv301
+  namespace: windows-non-prod
+  labels:
+    app: windows-vm
+    static-ip: "true"
+    ip: "10.132.104.11"
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: nymsdv301
+    spec:
+      domain:
+        cpu:
+          cores: 4
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: sata
+          interfaces:
+            - name: default
+              masquerade: {}
+            - name: net-0
+              bridge: {}
+        resources:
+          requests:
+            memory: 8Gi
+      networks:
+        - name: default
+          pod: {}
+        - name: net-0
+          multus:
+            networkName: windows-non-prod
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: nymsdv301-disk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              write_files:
+                - path: C:\configure-static-ip.ps1
+                  permissions: '0644'
+                  content: |
+                    $InterfaceName = (Get-NetAdapter | Where-Object {$_.MacAddress -eq "00:50:56:8b:5f:43"}).Name
+                    Set-NetIPInterface -InterfaceAlias $InterfaceName -Dhcp Disabled
+                    New-NetIPAddress -InterfaceAlias $InterfaceName -IPAddress "10.132.104.11" -PrefixLength 22 -DefaultGateway "10.132.104.1" -ErrorAction SilentlyContinue
+                    Set-DnsClientServerAddress -InterfaceAlias $InterfaceName -ServerAddresses ("10.132.104.53","8.8.8.8")
+                    Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+                    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+                    Enable-NetFirewallRule -DisplayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+                    Rename-Computer -NewName "NYMSDV301" -Force -ErrorAction SilentlyContinue
+                    "Static IP configured: 10.132.104.11" | Out-File C:\static-ip-config.log
+              
+              runcmd:
+                - powershell.exe -ExecutionPolicy Bypass -File C:\configure-static-ip.ps1

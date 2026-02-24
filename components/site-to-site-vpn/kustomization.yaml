@@ -7,4 +7,6 @@ resources:
   - rbac.yaml
   - configmap.yaml
   - deployment.yaml
-  # NOTE: secret-template.yaml is NOT included - create secret manually with actual credentials
+  # ExternalSecret to sync VPN certificates from AWS Secrets Manager
+  - externalsecret-vpn-certs.yaml
+  # NOTE: secret-template.yaml is NOT included - secret managed by ESO from AWS Secrets Manager

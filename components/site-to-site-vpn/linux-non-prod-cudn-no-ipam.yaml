@@ -1,0 +1,24 @@
+---
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: linux-non-prod
+  annotations:
+    description: "Secondary network for Linux VMs - Layer 2 without IPAM"
+    network.openshift.io/purpose: vm-migration-linux
+spec:
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+          - openshift-mtv
+          - vm-migrations
+          - vpn-infra
+  network:
+    layer2:
+      mtu: 1500
+      role: Secondary
+      ipam:
+        mode: Disabled
+    topology: Layer2

@@ -1,0 +1,50 @@
+---
+# ClusterUserDefinedNetwork for VM overlay network
+# This creates an isolated Layer 2 network for OpenShift Virtualization VMs
+# that will connect to the site-to-site VPN for direct access to VPC networks
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: vm-network
+  annotations:
+    description: "VM overlay network for site-to-site VPN connectivity"
+    network.openshift.io/purpose: "vm-vpn-access"
+spec:
+  # Target the vpn-infra namespace (or adjust to your VM namespace)
+  namespaceSelector:
+    matchLabels:
+      kubernetes.io/metadata.name: vpn-infra
+  network:
+    layer2:
+      role: Primary
+      subnets:
+        # VM overlay network CIDR - must not overlap with VPC CIDRs
+        # VMs will get IPs from this range
+        - "192.168.1.0/24"
+      # CRITICAL: IPAM must be disabled to allow IPSec VMs to act as gateways
+      # and to allow manual IP assignment on VMs
+      # WARNING: This disables port security - any VM can use any IP on this network
+      ipamLifecycle: Persistent
+      mtu: 1400  # Reduced MTU for IPSec overhead (1500 - 100 for encryption headers)
+---
+# NetworkAttachmentDefinition for attaching VMs to the CUDN
+# This allows VMs to have a secondary network interface on the vm-network
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vm-network-attachment
+  namespace: vpn-infra
+  annotations:
+    description: "Attachment definition for vm-network CUDN"
+    k8s.v1.cni.cncf.io/resourceName: k8s.ovn.org/vm-network
+spec:
+  config: |
+    {
+      "cniVersion": "0.4.0",
+      "name": "vm-network",
+      "type": "ovn-k8s-cni-overlay",
+      "netAttachDefName": "vpn-infra/vm-network-attachment",
+      "topology": "layer2",
+      "mtu": 1400,
+      "ipam": {}
+    }

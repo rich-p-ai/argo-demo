@@ -1,0 +1,260 @@
+---
+# VPN Gateway VM for windows-non-prod CUDN
+# Acts as router between 10.227.128.0/21 and pod network/VPN
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: vpn-gateway
+  namespace: windows-non-prod
+  labels:
+    app: vpn-gateway
+    role: router
+  annotations:
+    description: "Gateway VM routing windows-non-prod CUDN (10.227.128.0/21) to VPN"
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: vpn-gateway-root
+      spec:
+        pvc:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: gp3-csi
+        source:
+          registry:
+            url: docker://quay.io/containerdisks/centos-stream:9
+  template:
+    metadata:
+      labels:
+        app: vpn-gateway
+        role: router
+    spec:
+      domain:
+        cpu:
+          cores: 2
+          sockets: 1
+          threads: 1
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: root
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            # Primary interface - pod network (for VPN connectivity)
+            - name: default
+              masquerade: {}
+            # Secondary interface - windows-non-prod CUDN (10.227.128.1)
+            - name: cudn
+              bridge: {}
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: 2
+          limits:
+            memory: 4Gi
+            cpu: 2
+      networks:
+        - name: default
+          pod: {}
+        - name: cudn
+          multus:
+            networkName: windows-non-prod
+      volumes:
+        - name: root
+          dataVolume:
+            name: vpn-gateway-root
+        - name: cloudinit
+          cloudInitNoCloud:
+            secretRef:
+              name: vpn-gateway-cloudinit
+---
+# Cloud-init configuration for gateway VM
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vpn-gateway-cloudinit
+  namespace: windows-non-prod
+  annotations:
+    description: "Cloud-init for VPN gateway VM - configures routing and NAT"
+type: Opaque
+stringData:
+  userdata: |
+    #cloud-config
+    # VPN Gateway VM Configuration
+    # Bridges windows-non-prod CUDN (10.227.128.0/21) to pod network
+    
+    # Set root password (change in production)
+    password: changethis
+    chpasswd:
+      expire: false
+    ssh_pwauth: true
+    
+    # Add your SSH public keys for secure access
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQD... # Add your key here
+    
+    # Install required packages
+    packages:
+      - iptables
+      - iptables-services
+      - tcpdump
+      - net-tools
+      - bind-utils
+      - traceroute
+      - vim
+      - curl
+      - wget
+    
+    # Enable IP forwarding and disable reverse path filtering
+    bootcmd:
+      - echo "net.ipv4.ip_forward=1" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.all.rp_filter=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.default.rp_filter=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.all.accept_redirects=0" >> /etc/sysctl.d/99-gateway.conf
+      - echo "net.ipv4.conf.all.send_redirects=0" >> /etc/sysctl.d/99-gateway.conf
+      - sysctl --system
+    
+    write_files:
+      - path: /etc/sysconfig/network-scripts/ifcfg-eth1
+        owner: root:root
+        permissions: '0644'
+        content: |
+          # Secondary interface - windows-non-prod CUDN
+          DEVICE=eth1
+          BOOTPROTO=none
+          ONBOOT=yes
+          IPADDR=10.227.128.1
+          PREFIX=21
+          # No default gateway on this interface
+      
+      - path: /usr/local/bin/setup-gateway-routing.sh
+        owner: root:root
+        permissions: '0755'
+        content: |
+          #!/bin/bash
+          # Gateway routing setup script
+          set -e
+          
+          echo "=========================================="
+          echo "VPN Gateway VM - Routing Configuration"
+          echo "=========================================="
+          
+          # Enable IP forwarding
+          echo "Enabling IP forwarding..."
+          sysctl -w net.ipv4.ip_forward=1
+          sysctl -w net.ipv4.conf.all.rp_filter=0
+          sysctl -w net.ipv4.conf.default.rp_filter=0
+          
+          # Configure iptables NAT for windows-non-prod CUDN
+          echo "Configuring iptables NAT rules..."
+          
+          # Flush existing rules
+          iptables -t nat -F POSTROUTING 2>/dev/null || true
+          iptables -F FORWARD 2>/dev/null || true
+          
+          # NAT for CUDN traffic going out eth0 (to pod network/VPN)
+          iptables -t nat -A POSTROUTING -s 10.227.128.0/21 -o eth0 -j MASQUERADE
+          
+          # Allow forwarding from CUDN to pod network (outbound)
+          iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+          # Allow inbound from on-prem (VPN) to CUDN VMs - required for on-prem → VM (e.g. RDP)
+          iptables -A FORWARD -i eth0 -o eth1 -d 10.227.128.0/21 -j ACCEPT
+          # Allow return traffic for connections initiated from VMs
+          iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+          
+          # Allow forwarding within CUDN (VM-to-VM)
+          iptables -A FORWARD -i eth1 -o eth1 -j ACCEPT
+          
+          # Save iptables rules
+          echo "Saving iptables rules..."
+          iptables-save > /etc/sysconfig/iptables
+          
+          echo "✓ Routing configuration complete"
+          echo ""
+          echo "Interface Configuration:"
+          ip addr show eth0 | grep "inet "
+          ip addr show eth1 | grep "inet "
+          echo ""
+          echo "Routing Table:"
+          ip route show
+          echo ""
+          echo "NAT Rules:"
+          iptables -t nat -L -n -v
+          echo "=========================================="
+    
+    runcmd:
+      # Wait for network interfaces
+      - sleep 10
+      
+      # Bring up secondary interface
+      - echo "Configuring network interfaces..."
+      - nmcli con reload
+      - nmcli con up ifcfg-eth1 || ifup eth1
+      
+      # Verify interfaces are up
+      - ip addr show eth0
+      - ip addr show eth1
+      
+      # Stop and disable firewalld (using iptables instead)
+      - systemctl stop firewalld 2>/dev/null || true
+      - systemctl disable firewalld 2>/dev/null || true
+      
+      # Enable and start iptables service
+      - systemctl enable iptables
+      
+      # Run gateway routing setup
+      - /usr/local/bin/setup-gateway-routing.sh
+      
+      # Create status check script
+      - |
+        cat > /usr/local/bin/gateway-status.sh <<'EOF'
+        #!/bin/bash
+        echo "=== VPN Gateway Status ==="
+        echo "Hostname: $(hostname)"
+        echo "Uptime: $(uptime -p)"
+        echo ""
+        echo "=== Network Interfaces ==="
+        ip -br addr show
+        echo ""
+        echo "=== IP Forwarding ==="
+        sysctl net.ipv4.ip_forward
+        echo ""
+        echo "=== Routing Table ==="
+        ip route show
+        echo ""
+        echo "=== NAT Rules ==="
+        iptables -t nat -L POSTROUTING -n -v | head -5
+        echo ""
+        echo "=== Forwarding Rules ==="
+        iptables -L FORWARD -n -v | head -10
+        echo ""
+        echo "=== Connectivity Tests ==="
+        echo -n "Internet (8.8.8.8): "
+        ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 && echo "✓ OK" || echo "✗ FAIL"
+        echo -n "Gateway eth1 (10.227.128.1): "
+        ip addr show eth1 | grep -q "10.227.128.1" && echo "✓ OK" || echo "✗ FAIL"
+        EOF
+      - chmod +x /usr/local/bin/gateway-status.sh
+      
+      # Log completion
+      - echo "VPN Gateway VM initialization complete!" | tee /var/log/gateway-init.log
+      - /usr/local/bin/gateway-status.sh | tee -a /var/log/gateway-init.log
+    
+    final_message: |
+      ==========================================
+      VPN Gateway VM Ready
+      ==========================================
+      Gateway IP (CUDN): 10.227.128.1/21
+      Gateway IP (Pod):  $(ip -4 addr show eth0 | grep inet | awk '{print $2}')
+      
+      Run 'gateway-status.sh' to check status
+      ==========================================

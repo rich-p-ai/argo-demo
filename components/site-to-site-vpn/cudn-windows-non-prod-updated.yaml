@@ -1,0 +1,29 @@
+---
+# Updated ClusterUserDefinedNetwork - includes site-to-site-vpn namespace
+# This allows the VPN pod to attach to the windows-non-prod CUDN
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: windows-non-prod
+  annotations:
+    description: "Secondary network for Windows VMs - 10.227.128.0/21"
+    network.openshift.io/purpose: "vm-migration-windows"
+spec:
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values:
+          - windows-non-prod
+          - openshift-mtv
+          - vm-migrations
+          - vpn-infra
+          - site-to-site-vpn  # VPN pod can now attach to this network
+  network:
+    topology: Layer2
+    layer2:
+      role: Secondary
+      subnets:
+        - "10.227.128.0/21"
+      ipamLifecycle: Persistent
+      mtu: 1500

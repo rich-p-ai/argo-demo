@@ -1,0 +1,612 @@
+---
+# IPSec VPN Gateway VM for linux-non-prod CUDN (10.227.120.0/21)
+# Runs StrongSwan for VPN tunnel termination + gateway routing
+# Uses same AWS VPN connection and certificates as the windows-non-prod VPN
+# VPN Connection: vpn-059ee0661e851adf4
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: ipsec-vpn-linux
+  namespace: linux-non-prod
+  labels:
+    app: ipsec-vpn-linux
+    role: vpn-gateway
+    network: linux-non-prod
+  annotations:
+    description: "IPSec VPN gateway for linux-non-prod CUDN - StrongSwan with cert auth"
+spec:
+  running: true
+  dataVolumeTemplates:
+    - metadata:
+        name: ipsec-vpn-linux-root
+      spec:
+        pvc:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 30Gi
+          storageClassName: gp3-csi
+        source:
+          registry:
+            url: docker://quay.io/containerdisks/centos-stream:9
+  template:
+    metadata:
+      labels:
+        app: ipsec-vpn-linux
+        role: vpn-gateway
+        network: linux-non-prod
+    spec:
+      domain:
+        cpu:
+          cores: 2
+          sockets: 1
+          threads: 1
+        memory:
+          guest: 4Gi
+        devices:
+          disks:
+            - name: root
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+            - name: cudn
+              bridge: {}
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: 2
+          limits:
+            memory: 4Gi
+            cpu: 2
+      networks:
+        - name: default
+          pod: {}
+        - name: cudn
+          multus:
+            networkName: linux-non-prod
+      volumes:
+        - name: root
+          dataVolume:
+            name: ipsec-vpn-linux-root
+        - name: cloudinit
+          cloudInitNoCloud:
+            secretRef:
+              name: ipsec-vpn-linux-cloudinit
+---
+# Cloud-init configuration for linux-non-prod IPSec VPN Gateway VM
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ipsec-vpn-linux-cloudinit
+  namespace: linux-non-prod
+  annotations:
+    description: "Cloud-init for linux-non-prod VPN gateway - StrongSwan with cert auth"
+type: Opaque
+stringData:
+  userdata: |
+    #cloud-config
+
+    user: cloud-user
+    password: "Canon123!"
+    chpasswd:
+      expire: false
+      users:
+        - name: cloud-user
+          password: "Canon123!"
+          type: text
+        - name: root
+          password: "Canon123!"
+          type: text
+    ssh_pwauth: true
+
+    disable_root: false
+
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILC4UQZlAjU0yNNNn9WypjpZbxUVr1Pu4x8Aiig405mK ipsec-vpn-linux
+
+    packages:
+      - epel-release
+      - iptables
+      - iptables-services
+      - tcpdump
+      - net-tools
+      - bind-utils
+      - traceroute
+      - vim
+      - curl
+      - wget
+      - nmap
+      - iperf3
+
+    bootcmd:
+      - echo "net.ipv4.ip_forward=1" >> /etc/sysctl.d/99-vpn-gateway.conf
+      - echo "net.ipv4.conf.all.rp_filter=0" >> /etc/sysctl.d/99-vpn-gateway.conf
+      - echo "net.ipv4.conf.default.rp_filter=0" >> /etc/sysctl.d/99-vpn-gateway.conf
+      - echo "net.ipv4.conf.all.accept_redirects=0" >> /etc/sysctl.d/99-vpn-gateway.conf
+      - echo "net.ipv4.conf.default.accept_redirects=0" >> /etc/sysctl.d/99-vpn-gateway.conf
+      - echo "net.ipv4.conf.all.send_redirects=0" >> /etc/sysctl.d/99-vpn-gateway.conf
+      - echo "net.ipv4.conf.default.send_redirects=0" >> /etc/sysctl.d/99-vpn-gateway.conf
+      - sysctl --system
+
+    write_files:
+      - path: /etc/ssh/sshd_config.d/99-permit-root.conf
+        owner: root:root
+        permissions: '0644'
+        content: |
+          PermitRootLogin yes
+
+      - path: /etc/NetworkManager/system-connections/eth1.nmconnection
+        owner: root:root
+        permissions: '0600'
+        content: |
+          [connection]
+          id=eth1
+          type=ethernet
+          interface-name=eth1
+          autoconnect=true
+
+          [ipv4]
+          method=manual
+          address1=10.227.120.1/21
+          may-fail=false
+
+          [ipv6]
+          method=disabled
+
+      # VPN Client Certificate
+      - path: /etc/strongswan/ipsec.d/certs/client-cert.pem
+        owner: root:root
+        permissions: '0644'
+        content: |
+          -----BEGIN CERTIFICATE-----
+          MIID1TCCAr2gAwIBAgIRAOs0TGXP1nIVse+KBYTgVcIwDQYJKoZIhvcNAQELBQAw
+          dDELMAkGA1UEBhMCVVMxDjAMBgNVBAoMBWNhbm9uMQ0wCwYDVQQLDARjdXNhMREw
+          DwYDVQQIDAhOZXcgWW9yazEgMB4GA1UEAwwXcm9zYS12cG4tY2Etc3Vib3JkaW5h
+          dGUxETAPBgNVBAcMCE1lbHZpbGxlMB4XDTI2MDEzMTAwNDc1MVoXDTI3MDMwMjAx
+          NDc1MVowKzEpMCcGA1UEAwwgdnBuLTA1OWVlMDY2MWU4NTFhZGY0LmVuZHBvaW50
+          LTEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCyyL9CK4Zd3erhJLF4
+          PXXV0lI+Z9ec+52DQVHw4rZTn7ywwQBCjKG8rambZq2N5JH1y0Fq7FiPabZ8g2Jn
+          y1wD4ksT3V3klBZ6xt8hFxKhqGFqe5G9NRTVwY492wxRlIuqD6QTe87HaGQbIS0N
+          l1fuN955yDKBpPEupNBPa8H0+anXn3xLcmLtL739NQZrbvAx1amjd/t8HKTaxOKb
+          7IPZkv07azYRkEXm85keKNeDPnP2wfUtjfqIUDsUc7Ga1k1jj44B3heEhESHAsrp
+          4gahTKXh/hzb9s4TiLEHqcM2GpWepTTnLw/sI0OfdjFYkFAUM9tHIkVhefqIEIbq
+          u1epAgMBAAGjgaowgacwKwYDVR0RBCQwIoIgdnBuLTA1OWVlMDY2MWU4NTFhZGY0
+          LmVuZHBvaW50LTEwCQYDVR0TBAIwADAfBgNVHSMEGDAWgBQJu7NsGzcI5FMoTKMU
+          iM3jrxPRBjAdBgNVHQ4EFgQUCHG9qod5Wj4cw5qll5QbNC3kc84wDgYDVR0PAQH/
+          BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggrBgEFBQcDAjANBgkqhkiG9w0B
+          AQsFAAOCAQEAS/TqZ48EoqDsULXETswYKSN9I+jc0hCAKg2SJAl5gHu189SmEyXS
+          DQWtUoFtbSqYxkmf0TWk9pk9XD0l8G20bpmFARDae6plQdC9FPk2eUfOvN5bxz6E
+          7U/5vF7q+rf4VOgOCPt31zPfo+CNmENj5LjMP7iOcbG7aT2F7whnjG89uExnhPAu
+          gy7PWCfakOrdcwO8YT72irv+/FAWAhWSNKN1zNrm4gfR1+fBAk59xJmzviUCQT6g
+          bJSk6iOkmbmtytGvpioFNuUUu0cwtqE5L4YUkApXGipx45KgPr8ZjFpUAtRCUMDC
+          Y7UxYFJxyLcJHiLUeUm4k6QoRSdAtNrqIw==
+          -----END CERTIFICATE-----
+
+      # VPN Client Private Key
+      - path: /etc/strongswan/ipsec.d/private/client-key.pem
+        owner: root:root
+        permissions: '0600'
+        content: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCyyL9CK4Zd3erh
+          JLF4PXXV0lI+Z9ec+52DQVHw4rZTn7ywwQBCjKG8rambZq2N5JH1y0Fq7FiPabZ8
+          g2Jny1wD4ksT3V3klBZ6xt8hFxKhqGFqe5G9NRTVwY492wxRlIuqD6QTe87HaGQb
+          IS0Nl1fuN955yDKBpPEupNBPa8H0+anXn3xLcmLtL739NQZrbvAx1amjd/t8HKTa
+          xOKb7IPZkv07azYRkEXm85keKNeDPnP2wfUtjfqIUDsUc7Ga1k1jj44B3heEhESH
+          Asrp4gahTKXh/hzb9s4TiLEHqcM2GpWepTTnLw/sI0OfdjFYkFAUM9tHIkVhefqI
+          EIbqu1epAgMBAAECggEAUIgVgshZQ5HxOY4ONMO2fuS4sCyVVjyOpG95agCtMTjc
+          RWACbneraPJu2jWjiq1BRA7UvkWM1LjA/xAtdOSI46T8vYtyvkIoaBCJtH2QomnW
+          y6CysqAk7O49VMaFI4A+cxGNjkswBumSYhgNE7iu3nqjB4cynOw/yYtq28OFwAMu
+          GyWF/4G8fDFFwHFpvHXVYyP1+CgEgL4zdjynJ/uSwDBp2EbPHk86qZuER6pXX7Sk
+          NftU1GdU20PMSu1aAe5pooIP2B2HDXijYDCzuDl1B0QpV+YRJPtHGSzvFHrBOwyB
+          ziJG8QpE/i7bsCD+741Y/UQR6516Hfxx0TTShn6zawKBgQDsRmBoNEudkp6Tqg3L
+          RA6rbMI/Uy9W2m7bssEn+pcDaNLbJGLlupaL+WpndtfbPO8zMGDAZx0v8vU9WpjR
+          XGSkKY94x++FliPCgRV2taSVq2wXOYsx0/p6PrbVJZC67/jg/xXQeco6cM1LPr+I
+          ezCBGD4kU6nymyxmLjznRYBT9wKBgQDBtbBpKo6l1y9XjSvi56iKugHmvwq5XAzR
+          3QyKZ4VAcY467dkdBcOb+fYUbpDtetto3lpZKRvISw6n5vX41KxLuNjwZjzraILM
+          TvhbJ78datnwisCrmq0w5HoG/OHrmhUolU8mYHiKZW1tzxjXv8mXw8CLnaLTq5oC
+          51+I4PuJXwKBgQC6KoGP2ZSy5XHZO6Z+wHMmkx1CtBKaxqWOqfwTuhj+8LsjPDpI
+          dIpmY/F48GUIM6ztknLJZvXScAbXfujmHXyW9MA9FJwfj7tBaGA3FsxFuboDWq3Y
+          ZwP3Ci8ZJu4wvSBGd/cCOtQi0/qODTTxHs+LCET+boV7yNRk9o26VELW5QKBgQCK
+          MrmdDgOfRZo8+DarN2MDNhlNKlbYT1fGEdJ0m85xX5J9cFtJXWdkzDxH72nuQ4xt
+          kNUcbzum9gWKvDgYQoJ5s3Lyb75epL1MTbraLc0ni6fY+OTkiQGutBJrEdeMYu1d
+          eshxNLpK4nnjsbCjm+yTHdEsylX0daT3FWMPIJPUOQKBgHkikRvYitpnOii8r8gx
+          242wVTsZCiQI4148P3CBquhpuuXjOkaMPjzmthUf0NW4lbPskBf3bM3ymzVGLG1u
+          fwUsrq4RQg2zCMc/Zdr68HiUTPWm/mw0iYCq/gFYtdI/ik5dS0g05ftI1Ja5tieW
+          sfBBxIZ+9cWd4fu5t28gQriz
+          -----END PRIVATE KEY-----
+
+      # VPN CA Certificate Chain
+      - path: /etc/strongswan/ipsec.d/cacerts/ca-chain.pem
+        owner: root:root
+        permissions: '0644'
+        content: |
+          -----BEGIN CERTIFICATE-----
+          MIID0jCCArqgAwIBAgIRAJXG1aEwfoQu0Q6czXgiQvIwDQYJKoZIhvcNAQELBQAw
+          bTELMAkGA1UEBhMCVVMxDjAMBgNVBAoMBWNhbm9uMQ0wCwYDVQQLDARjdXNhMREw
+          DwYDVQQIDAhOZXcgWW9yazEZMBcGA1UEAwwQcm9zYS12cG4tY2Etcm9vdDERMA8G
+          A1UEBwwITWVsdmlsbGUwHhcNMjUxMDEzMTkwODM1WhcNMzAxMjMxMjAwNzQzWjB0
+          MQswCQYDVQQGEwJVUzEOMAwGA1UECgwFY2Fub24xDTALBgNVBAsMBGN1c2ExETAP
+          BgNVBAgMCE5ldyBZb3JrMSAwHgYDVQQDDBdyb3NhLXZwbi1jYS1zdWJvcmRpbmF0
+          ZTERMA8GA1UEBwwITWVsdmlsbGUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+          AoIBAQCi+FVMETN51egr7QR0StxSh+GKzc3EdygTP/YTYjwAbX/M00xWKKQDgjHJ
+          v/KgM4VEFL6sN1kluRaTnC5FIWpjVCoMVys9F/vJirjbhMSDDXjcTFKg+7kOIoa8
+          y33MRPmwQe/gXq0hMKqFNaSuZi2qv/PgqFR4Cby9fT+yujJ4EoptHBT14yaqlLxZ
+          MbpEKaaAKwbDQoa0T3Rl9ooj8zeNnlWGxVHjPIRqS+AbyCeOr0MjdvtKMcwWhUQs
+          w/362H06e92Y0dCU11C7ApSpilTE/oObRh161L7WnO/nAkjtQ97JITMYwdkanLVG
+          TJOVsBvzSIOZbJP5EBJP2gJ3D+M5AgMBAAGjZjBkMBIGA1UdEwEB/wQIMAYBAf8C
+          AQAwHwYDVR0jBBgwFoAUBY6vr/q7vuLz9Uay9CK2H0I839swHQYDVR0OBBYEFAm7
+          s2wbNwjkUyhMoxSIzeOvE9EGMA4GA1UdDwEB/wQEAwIBhjANBgkqhkiG9w0BAQsF
+          AAOCAQEAD/itEqd2kKBSbA0ig2kFJXP0SglfJPCTSkNSPSZsir2v+K97+EzPXRYh
+          5f5s4i0nq2Tg7Ues2wm9HMLIvYQUSX2UJdiWBHOOAKNTgAaQ2u1hlA89p3kzUG7T
+          jVJnMp5BQwICqaSopNaTMl5el3BvCXRJsnTLKJMh7JNLo7pE9ttNZjWru9fEWb7J
+          BtbHrLBJ2TsAmn17J01cSZd2tP2OqO9zotBkKrpVa2ehw02xgwOoW2S7uqn1HB7E
+          pswfC3Knxsubkd+OT1V+ZHzNjHZ8VxkFek2h7wRpz+aBGSB6mVcgNnhi+vMRd1zD
+          fY+YNg7DLrgCnddBgHGgbWssW3r2LQ==
+          -----END CERTIFICATE-----
+          -----BEGIN CERTIFICATE-----
+          MIIDpjCCAo6gAwIBAgIQKb4HQf9KT8u3gLUG2Hz4qTANBgkqhkiG9w0BAQsFADBt
+          MQswCQYDVQQGEwJVUzEOMAwGA1UECgwFY2Fub24xDTALBgNVBAsMBGN1c2ExETAP
+          BgNVBAgMCE5ldyBZb3JrMRkwFwYDVQQDDBByb3NhLXZwbi1jYS1yb290MREwDwYD
+          VQQHDAhNZWx2aWxsZTAeFw0yNTEwMTMxODMzMDJaFw0zNTEwMTMxOTMyNTBaMG0x
+          CzAJBgNVBAYTAlVTMQ4wDAYDVQQKDAVjYW5vbjENMAsGA1UECwwEY3VzYTERMA8G
+          A1UECAwITmV3IFlvcmsxGTAXBgNVBAMMEHJvc2EtdnBuLWNhLXJvb3QxETAPBgNV
+          BAcMCE1lbHZpbGxlMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0+/q
+          1OZ9cr9269kBdZIgTOhwRTXwhDlLY8ir3OLJrU6uKUkAfnq0FAzO9sO7jRPZFLMS
+          GAed4y008Y1/sym0SCGHYVXkl63uGAc8EoCnAD8rDMKRCL2kN8JaE/lPNaETjFlX
+          QjMPJ/sIEACOwQhS5Yil6qj2KUZ7P0UExl58wjxnNYIM8d6fL06pEjXtGXrn4RKX
+          GBO9ZhSnfZC+Um0ktzhHwcmIsYNo/Nj/Zgq4JGIZfzWQbLibpleB9/SJpK8M94TK
+          vbDIQsyPyZoFOix9W0B8mfc420LBzk8M/rCihiRWPqCEo5PkIY3PTiUGiYwU9mnc
+          xDoty74JoUKJ1M3SaQIDAQABo0IwQDAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQW
+          BBQFjq+v+ru+4vP1RrL0IrYfQjzf2zAOBgNVHQ8BAf8EBAMCAYYwDQYJKoZIhvcN
+          AQELBQADggEBAMbm/25iabCUXxh9EQ9cpwgbxnkKVRQabpO6edhMWfBAftk2BVJy
+          56EDZTkszWUh7hfSJOfWLmBugop62rweyRN2ED0YAeS0yicZCBdhN5kUucaOAyyK
+          fwXzTCmKlz2ASabSAZThWmegh74HM1z+XawN/UEokmYMu7Nnvtz1jCnsQXfAsjgT
+          LMcuyqp5Df26doIiHMI5Yoqo6lkU5ajDtJJL5vmejkWIE2NdEp/mYHfPmnM/E+1a
+          6g/RwDcGK/jQppXaF8xMpfB486QwROpVliVGPhp8Kk1Cne9mTG7xo0RInOpQcz6w
+          ORCIiQjJnlENmWKZn5ihnqV+KjRNjxbIve0=
+          -----END CERTIFICATE-----
+
+      # StrongSwan ipsec.conf - same VPN connection as windows-non-prod
+      - path: /etc/strongswan/ipsec.conf
+        owner: root:root
+        permissions: '0600'
+        content: |
+          config setup
+              charondebug="ike 2, knl 2, cfg 2, net 2, esp 2, dmn 2, mgr 2"
+              uniqueids=no
+
+          conn %default
+              keyexchange=ikev1
+              ike=aes128-sha1-modp1024!
+              esp=aes128-sha1-modp1024!
+              ikelifetime=28800s
+              lifetime=3600s
+              dpdaction=restart
+              dpddelay=10s
+              dpdtimeout=30s
+              rekey=yes
+              reauth=no
+              authby=rsasig
+              leftcert=client-cert.pem
+              left=%defaultroute
+              leftsubnet=10.227.120.0/21
+              rightsubnet=10.63.0.0/16,10.68.0.0/16,10.99.0.0/16,10.110.0.0/16,10.140.0.0/16,10.141.0.0/16,10.158.0.0/16,10.227.112.0/20
+              auto=start
+              closeaction=restart
+              type=tunnel
+              installpolicy=yes
+              aggressive=no
+
+          # AWS VPN Tunnel 1 (Primary) - 3.232.27.186
+          conn aws-vpn-tunnel1
+              right=3.232.27.186
+              rightid="CN=vpn-059ee0661e851adf4.endpoint-0"
+              leftid="vpn-059ee0661e851adf4.endpoint-0"
+              leftsourceip=169.254.43.134
+              mark=100
+              reqid=1
+
+          # AWS VPN Tunnel 2 (Secondary) - 98.94.136.2
+          conn aws-vpn-tunnel2
+              right=98.94.136.2
+              rightid="CN=vpn-059ee0661e851adf4.endpoint-1"
+              leftid="vpn-059ee0661e851adf4.endpoint-0"
+              leftsourceip=169.254.118.14
+              mark=200
+              reqid=2
+
+      # StrongSwan secrets - RSA key-based auth
+      - path: /etc/strongswan/ipsec.secrets
+        owner: root:root
+        permissions: '0600'
+        content: |
+          : RSA client-key.pem
+
+      # VPN + Gateway configuration script
+      - path: /usr/local/bin/configure-vpn-gateway.sh
+        owner: root:root
+        permissions: '0755'
+        content: |
+          #!/bin/bash
+          set -e
+
+          echo "=========================================="
+          echo "linux-non-prod VPN Gateway Configuration"
+          echo "=========================================="
+
+          # Wait for eth1 (CUDN interface)
+          for i in {1..30}; do
+            if ip link show eth1 &>/dev/null; then
+              echo "[OK] eth1 (CUDN) interface found"
+              break
+            fi
+            echo "Waiting for eth1... ($i/30)"
+            sleep 2
+          done
+
+          # Ensure eth1 has the gateway IP
+          if ! ip addr show eth1 | grep -q "10.227.120.1/21"; then
+            echo "Configuring eth1 with gateway IP 10.227.120.1/21..."
+            ip addr flush dev eth1
+            ip addr add 10.227.120.1/21 dev eth1
+            ip link set eth1 up
+          fi
+          echo "[OK] eth1: 10.227.120.1/21"
+
+          # Kernel parameters for routing + IPSec
+          echo "Configuring kernel parameters..."
+          sysctl -w net.ipv4.ip_forward=1
+          sysctl -w net.ipv4.conf.all.rp_filter=0
+          sysctl -w net.ipv4.conf.default.rp_filter=0
+          sysctl -w net.ipv4.conf.all.accept_redirects=0
+          sysctl -w net.ipv4.conf.default.accept_redirects=0
+          sysctl -w net.ipv4.conf.all.send_redirects=0
+          sysctl -w net.ipv4.conf.default.send_redirects=0
+
+          # Disable firewalld in favor of iptables
+          systemctl stop firewalld 2>/dev/null || true
+          systemctl disable firewalld 2>/dev/null || true
+
+          # Configure iptables rules
+          echo "Configuring iptables NAT and forwarding..."
+
+          iptables -t nat -F
+          iptables -F FORWARD
+
+          # NAT for CUDN traffic going to external networks via eth0 (pod network)
+          iptables -t nat -A POSTROUTING -s 10.227.120.0/21 ! -d 10.227.120.0/21 -o eth0 -j MASQUERADE
+
+          # Forward from CUDN to pod network (outbound)
+          iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+          # Forward from VPN/pod network to CUDN VMs (inbound from on-prem)
+          iptables -A FORWARD -i eth0 -o eth1 -d 10.227.120.0/21 -j ACCEPT
+          # Return traffic for established connections
+          iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+          # VM-to-VM forwarding within CUDN
+          iptables -A FORWARD -i eth1 -o eth1 -j ACCEPT
+          # Drop invalid packets
+          iptables -A FORWARD -m state --state INVALID -j DROP
+
+          iptables-save > /etc/sysconfig/iptables
+          systemctl enable iptables
+          systemctl start iptables
+          echo "[OK] iptables rules configured"
+
+          # Install and configure StrongSwan
+          echo "Installing StrongSwan from EPEL..."
+          dnf install -y --nodocs https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm 2>&1 | tail -3 || true
+          dnf install -y --nodocs strongswan 2>&1 | tail -5 || true
+
+          # Create certificate directories
+          mkdir -p /etc/strongswan/ipsec.d/private
+          mkdir -p /etc/strongswan/ipsec.d/certs
+          mkdir -p /etc/strongswan/ipsec.d/cacerts
+
+          # Verify certificates exist (embedded via cloud-init)
+          echo "Verifying VPN certificates..."
+          for f in /etc/strongswan/ipsec.d/certs/client-cert.pem \
+                   /etc/strongswan/ipsec.d/private/client-key.pem \
+                   /etc/strongswan/ipsec.d/cacerts/ca-chain.pem; do
+            if [ -f "$f" ]; then
+              echo "[OK] $(basename $f)"
+            else
+              echo "[FAIL] Missing: $f"
+            fi
+          done
+
+          chmod 600 /etc/strongswan/ipsec.d/private/client-key.pem
+          chmod 644 /etc/strongswan/ipsec.d/certs/client-cert.pem
+          chmod 644 /etc/strongswan/ipsec.d/cacerts/ca-chain.pem
+
+          # Find and start StrongSwan
+          STARTER_BIN=$(find /usr -name starter -type f 2>/dev/null | head -1)
+          if [ -n "$STARTER_BIN" ]; then
+            echo "Starting StrongSwan ($STARTER_BIN)..."
+            $STARTER_BIN --daemon charon 2>&1 &
+            sleep 10
+            echo "[OK] StrongSwan started"
+            strongswan statusall 2>/dev/null || ipsec statusall 2>/dev/null || echo "Checking: ps aux | grep charon"
+          else
+            echo "[WARN] StrongSwan starter not found after install"
+          fi
+
+          echo ""
+          echo "=== Network Status ==="
+          echo "Hostname: $(hostname)"
+          ip -br addr show
+          echo ""
+          echo "IP Forwarding: $(sysctl -n net.ipv4.ip_forward)"
+          echo "=========================================="
+
+      # Script to start VPN after certificates are installed
+      - path: /usr/local/bin/start-vpn.sh
+        owner: root:root
+        permissions: '0755'
+        content: |
+          #!/bin/bash
+          set -e
+
+          echo "Starting StrongSwan VPN..."
+
+          # Verify certificates exist
+          for f in /etc/strongswan/ipsec.d/certs/client-cert.pem \
+                   /etc/strongswan/ipsec.d/private/client-key.pem \
+                   /etc/strongswan/ipsec.d/cacerts/ca-chain.pem; do
+            if [ ! -f "$f" ]; then
+              echo "ERROR: Missing certificate: $f"
+              echo "Run: /usr/local/bin/configure-vpn-gateway.sh for instructions"
+              exit 1
+            fi
+          done
+
+          chmod 600 /etc/strongswan/ipsec.d/private/client-key.pem
+          chmod 644 /etc/strongswan/ipsec.d/certs/client-cert.pem
+          chmod 644 /etc/strongswan/ipsec.d/cacerts/ca-chain.pem
+
+          # Find and start StrongSwan
+          STARTER_BIN=$(find /usr -name starter -type f 2>/dev/null | head -1)
+          if [ -z "$STARTER_BIN" ]; then
+            echo "ERROR: StrongSwan not installed. Run:"
+            echo "  dnf install -y strongswan"
+            exit 1
+          fi
+
+          # Kill any existing StrongSwan process
+          pkill -f charon 2>/dev/null || true
+          sleep 2
+
+          echo "Starting StrongSwan ($STARTER_BIN)..."
+          $STARTER_BIN --daemon charon 2>&1 &
+          sleep 5
+
+          # Verify tunnel status
+          echo ""
+          echo "=== VPN Tunnel Status ==="
+          strongswan statusall 2>/dev/null || ipsec statusall 2>/dev/null || echo "Check: ps aux | grep charon"
+
+      # Comprehensive status check script
+      - path: /usr/local/bin/vpn-status.sh
+        owner: root:root
+        permissions: '0755'
+        content: |
+          #!/bin/bash
+          echo "=========================================="
+          echo "linux-non-prod VPN Gateway Status"
+          echo "=========================================="
+          echo "Hostname: $(hostname)"
+          echo "Uptime:   $(uptime -p)"
+          echo ""
+          echo "=== Network Interfaces ==="
+          ip -br addr show
+          echo ""
+          echo "=== Routing Table ==="
+          ip route show
+          echo ""
+          echo "=== IP Forwarding ==="
+          sysctl net.ipv4.ip_forward
+          echo ""
+          echo "=== StrongSwan VPN Status ==="
+          strongswan statusall 2>/dev/null || ipsec statusall 2>/dev/null || echo "StrongSwan not running"
+          echo ""
+          echo "=== NAT Rules ==="
+          iptables -t nat -L POSTROUTING -n -v
+          echo ""
+          echo "=== Forwarding Rules ==="
+          iptables -L FORWARD -n -v
+          echo ""
+          echo "=== Connectivity Tests ==="
+          echo -n "Internet (8.8.8.8): "
+          ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 && echo "OK" || echo "FAIL"
+          echo -n "AWS Tunnel 1 (3.232.27.186): "
+          ping -c 1 -W 2 3.232.27.186 >/dev/null 2>&1 && echo "OK" || echo "FAIL"
+          echo -n "AWS Tunnel 2 (98.94.136.2): "
+          ping -c 1 -W 2 98.94.136.2 >/dev/null 2>&1 && echo "OK" || echo "FAIL"
+          echo -n "Gateway IP (10.227.120.1): "
+          ip addr show eth1 | grep -q "10.227.120.1" && echo "OK" || echo "FAIL"
+          echo "=========================================="
+
+      # Inject certificates from Kubernetes secret into the VM
+      - path: /usr/local/bin/inject-certs.sh
+        owner: root:root
+        permissions: '0755'
+        content: |
+          #!/bin/bash
+          # Run this FROM THE CLUSTER (not inside the VM)
+          # Extracts VPN certificates from the Kubernetes secret
+          # and copies them into the VM via virtctl
+
+          NS="linux-non-prod"
+          VM="ipsec-vpn-linux"
+          SECRET="vpn-certificates"
+
+          echo "Extracting certificates from secret $SECRET in $NS..."
+
+          oc get secret "$SECRET" -n "$NS" -o jsonpath='{.data.client-cert\.pem}' | base64 -d > /tmp/client-cert.pem
+          oc get secret "$SECRET" -n "$NS" -o jsonpath='{.data.client-key\.pem}' | base64 -d > /tmp/client-key.pem
+          oc get secret "$SECRET" -n "$NS" -o jsonpath='{.data.ca-chain\.pem}' | base64 -d > /tmp/ca-chain.pem
+
+          echo "Copying certificates into VM $VM..."
+
+          virtctl -n "$NS" scp /tmp/client-cert.pem root@"$VM":/etc/strongswan/ipsec.d/certs/
+          virtctl -n "$NS" scp /tmp/client-key.pem root@"$VM":/etc/strongswan/ipsec.d/private/
+          virtctl -n "$NS" scp /tmp/ca-chain.pem root@"$VM":/etc/strongswan/ipsec.d/cacerts/
+
+          echo "Starting VPN inside VM..."
+          virtctl -n "$NS" ssh root@"$VM" -- /usr/local/bin/start-vpn.sh
+
+          echo "Done. Check status:"
+          echo "  virtctl -n $NS ssh root@$VM -- /usr/local/bin/vpn-status.sh"
+
+          rm -f /tmp/client-cert.pem /tmp/client-key.pem /tmp/ca-chain.pem
+
+    runcmd:
+      - sleep 5
+      - nmcli connection reload
+      - nmcli connection up eth1 || true
+      - sleep 10
+      - /usr/local/bin/configure-vpn-gateway.sh 2>&1 | tee /var/log/vpn-gateway-config.log
+      - |
+        cat > /etc/motd <<'EOF'
+        ==========================================
+        linux-non-prod VPN Gateway VM
+        ==========================================
+        Role: StrongSwan VPN + CUDN Gateway
+        Gateway IP: 10.227.120.1/21 (linux-non-prod CUDN)
+        VPN: AWS vpn-059ee0661e851adf4
+
+        Commands:
+          vpn-status.sh        - Full status check
+          start-vpn.sh         - Start VPN (after certs installed)
+          ip addr show         - Show interfaces
+          iptables -t nat -L   - Show NAT rules
+
+        Logs:
+          /var/log/vpn-gateway-config.log
+          /var/log/charon.log
+
+        CERTIFICATE INJECTION (run from cluster, not VM):
+          See: inject-certs.sh  (in /usr/local/bin/)
+          Or manually:
+            1. Extract certs from K8s secret vpn-certificates
+            2. SCP into /etc/strongswan/ipsec.d/{certs,private,cacerts}/
+            3. Run: start-vpn.sh
+        ==========================================
+        EOF
+
+    final_message: |
+      ==========================================
+      linux-non-prod VPN Gateway VM Ready
+      ==========================================
+      Gateway IP: 10.227.120.1/21 (linux-non-prod CUDN)
+      VPN Connection: vpn-059ee0661e851adf4
+      Tunnels: 3.232.27.186, 98.94.136.2
+
+      Next: Inject certificates, then run start-vpn.sh
+      ==========================================

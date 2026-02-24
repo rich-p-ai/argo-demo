@@ -1,0 +1,69 @@
+---
+# Static IP Configuration for Windows VMs using CloudBase-Init
+# This ConfigMap contains cloud-init data that will configure static IP on first boot
+# Requires cloudbase-init to be installed in the Windows image
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: windows-static-ip-configs
+  namespace: windows-non-prod
+data:
+  # NYMSDV297 - 10.132.104.10
+  nymsdv297-userdata: |
+    #cloud-config
+    write_files:
+      - path: C:\configure-static-ip.ps1
+        permissions: '0644'
+        content: |
+          # Configure Static IP
+          $InterfaceName = (Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1).Name
+          New-NetIPAddress -InterfaceAlias $InterfaceName -IPAddress "10.132.104.10" -PrefixLength 22 -DefaultGateway "10.132.104.1" -ErrorAction SilentlyContinue
+          Set-DnsClientServerAddress -InterfaceAlias $InterfaceName -ServerAddresses ("10.132.104.53","8.8.8.8")
+          
+          # Enable RDP
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Enable-NetFirewallRule -DisplayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+          
+          # Set hostname
+          Rename-Computer -NewName "NYMSDV297" -Force -ErrorAction SilentlyContinue
+    
+    runcmd:
+      - powershell.exe -ExecutionPolicy Bypass -File C:\configure-static-ip.ps1
+
+  # NYMSDV301 - 10.132.104.11
+  nymsdv301-userdata: |
+    #cloud-config
+    write_files:
+      - path: C:\configure-static-ip.ps1
+        permissions: '0644'
+        content: |
+          $InterfaceName = (Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1).Name
+          New-NetIPAddress -InterfaceAlias $InterfaceName -IPAddress "10.132.104.11" -PrefixLength 22 -DefaultGateway "10.132.104.1" -ErrorAction SilentlyContinue
+          Set-DnsClientServerAddress -InterfaceAlias $InterfaceName -ServerAddresses ("10.132.104.53","8.8.8.8")
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Enable-NetFirewallRule -DisplayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+          Rename-Computer -NewName "NYMSDV301" -Force -ErrorAction SilentlyContinue
+    
+    runcmd:
+      - powershell.exe -ExecutionPolicy Bypass -File C:\configure-static-ip.ps1
+
+  # NYMSDV312 - 10.132.104.19
+  nymsdv312-userdata: |
+    #cloud-config
+    write_files:
+      - path: C:\configure-static-ip.ps1
+        permissions: '0644'
+        content: |
+          $InterfaceName = (Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1).Name
+          New-NetIPAddress -InterfaceAlias $InterfaceName -IPAddress "10.132.104.19" -PrefixLength 22 -DefaultGateway "10.132.104.1" -ErrorAction SilentlyContinue
+          Set-DnsClientServerAddress -InterfaceAlias $InterfaceName -ServerAddresses ("10.132.104.53","8.8.8.8")
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Enable-NetFirewallRule -DisplayName "File and Printer Sharing (Echo Request - ICMPv4-In)"
+          Rename-Computer -NewName "NYMSDV312" -Force -ErrorAction SilentlyContinue
+    
+    runcmd:
+      - powershell.exe -ExecutionPolicy Bypass -File C:\configure-static-ip.ps1

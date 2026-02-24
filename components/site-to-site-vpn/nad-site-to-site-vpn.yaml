@@ -1,0 +1,22 @@
+---
+# NetworkAttachmentDefinition for site-to-site-vpn namespace
+# Manually created to attach VPN pod to windows-non-prod CUDN
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: windows-non-prod
+  namespace: site-to-site-vpn
+  annotations:
+    description: "windows-non-prod CUDN attachment for VPN pod"
+    k8s.v1.cni.cncf.io/resourceName: k8s.ovn.org/windows-non-prod
+spec:
+  config: |
+    {
+      "cniVersion": "0.4.0",
+      "name": "windows-non-prod",
+      "type": "ovn-k8s-cni-overlay",
+      "netAttachDefName": "site-to-site-vpn/windows-non-prod",
+      "topology": "layer2",
+      "mtu": 1500,
+      "ipam": {}
+    }

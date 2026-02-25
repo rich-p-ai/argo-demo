@@ -1,6 +1,0 @@
-# hostname,ip,mac_address,memory,cpu,disk_pvc
-nymsdv297,10.132.104.10,00:50:56:bd:4e:b1,8Gi,4,nymsdv297-disk
-nymsdv301,10.132.104.11,00:50:56:8b:5f:43,8Gi,4,nymsdv301-disk
-nymsdv312,10.132.104.19,00:50:56:xx:xx:xx,8Gi,4,nymsdv312-disk
-nymsdv313,10.132.104.20,00:50:56:xx:xx:xx,16Gi,8,nymsdv313-disk
-nymsdv314,10.132.104.21,00:50:56:xx:xx:xx,8Gi,4,nymsdv314-disk

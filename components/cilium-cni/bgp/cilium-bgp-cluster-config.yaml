@@ -1,0 +1,17 @@
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata:
+  name: rosa-nonprod-bgp
+spec:
+  nodeSelector:
+    matchLabels:
+      node-role.kubernetes.io/worker: ""
+  bgpInstances:
+    - name: "instance-65010"
+      localASN: 65010
+      peers:
+        - name: "vpc-router"
+          peerASN: 64512
+          peerAddress: "10.227.96.1"
+          peerConfigRef:
+            name: "rosa-nonprod-peer"

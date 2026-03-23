@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Cilium CNI - BGP Control Plane resources
+# These CRDs are applied after Cilium is installed via Helm (install-cilium-cni.sh).
+# The Helm installation uses values-eni.yaml in this directory.
+resources:
+  - bgp/cilium-bgp-peer-config.yaml
+  - bgp/cilium-bgp-advertisement.yaml
+  - bgp/cilium-lb-ipam-pool.yaml
+  - bgp/cilium-bgp-cluster-config.yaml

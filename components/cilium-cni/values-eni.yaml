@@ -1,0 +1,93 @@
+#------------------------------------------------------------------------------
+# Cilium Helm Values - AWS ENI IPAM Mode for ROSA HCP
+#
+# Deploy with:
+#   helm install cilium oci://quay.io/cilium/charts/cilium \
+#     --version <CILIUM_VERSION> \
+#     --namespace kube-system \
+#     -f values-eni.yaml
+#
+# Reference: https://docs.cilium.io/en/stable/network/concepts/ipam/eni/
+#------------------------------------------------------------------------------
+
+# ENI-based IPAM — pods receive IPs directly from AWS VPC subnets
+ipam:
+  mode: eni
+
+eni:
+  enabled: true
+  awsEnablePrefixDelegation: false
+  awsReleaseExcessIPs: true
+  # Skip eth0 (node primary) for pod IP allocation
+  firstInterfaceIndex: 1
+  # Inherit security groups from eth0 unless overridden per-node
+  # subnetTags: {}
+  # securityGroupTags: {}
+
+# No tunnel/overlay — native AWS routing via ENIs
+routingMode: native
+# Required for ENI mode: enable endpoint routes on each node
+endpointRoutes:
+  enabled: true
+
+# BPF masquerade replaces iptables — egressMasqueradeInterfaces not used with BPF mode
+# Use 'devices' to specify the interface for BPF programs if needed
+# devices: eth0
+
+# Auto-create CiliumNode CRDs on agent startup
+autoCreateCiliumNodeResource: "true"
+
+# IPv4 masquerade required for BPF masquerade mode
+enableIPv4Masquerade: true
+# Enable BPF masquerading (preferred over iptables)
+bpf:
+  masquerade: true
+
+# Node init fixes RHCOS broken /opt/cni symlink on --no-cni ROSA HCP nodes.
+# On RHCOS, /opt/cni is a symlink to /usr/lib/opt/cni (read-only ostree).
+# The prestartScript removes it and creates a writable directory.
+nodeInit:
+  enabled: true
+  prestartScript: |
+    if [ -L /host/opt/cni ] && [ ! -d /host/opt/cni ]; then
+      rm -f /host/opt/cni
+      mkdir -p /host/opt/cni/bin
+    elif [ ! -d /host/opt/cni/bin ]; then
+      mkdir -p /host/opt/cni/bin
+    fi
+
+# Kube-proxy replacement — Cilium handles service load balancing
+kubeProxyReplacement: true
+
+# OpenShift / ROSA HCP compatibility
+# ROSA HCP CRI-O config:
+#   network_dir = /etc/kubernetes/cni/net.d/   (CNI config)
+#   plugin_dirs = /var/lib/cni/bin             (CNI binaries)
+cni:
+  confPath: /etc/kubernetes/cni/net.d
+  binPath: /var/lib/cni/bin
+  exclusive: true
+
+# Operator settings
+operator:
+  replicas: 2
+
+# Hubble observability (enabled by default, toggle via cluster .env)
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
+# Cluster identification for ENI tagging and garbage collection
+cluster:
+  name: ""  # Populated by install script from CLUSTER_NAME
+
+# BGP Control Plane — advertise Service LoadBalancer IPs to upstream routers
+bgpControlPlane:
+  enabled: true
+
+# Metrics
+prometheus:
+  enabled: true

@@ -1,0 +1,8 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Deploys Cilium BGP Control Plane resources for non-prod ROSA HCP clusters.
+# Cilium must already be installed via Helm (install-cilium-cni.sh) before sync.
+resources:
+  - ../../../../components/cilium-cni/

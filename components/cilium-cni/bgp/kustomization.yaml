@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cilium-bgp-peer-config.yaml
+  - cilium-bgp-advertisement.yaml
+  - cilium-lb-ipam-pool.yaml
+  - cilium-bgp-cluster-config.yaml

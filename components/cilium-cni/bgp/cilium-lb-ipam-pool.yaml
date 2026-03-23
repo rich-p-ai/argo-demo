@@ -1,0 +1,29 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: service-pool
+spec:
+  blocks:
+    - cidr: "10.227.108.0/24"
+---
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: linux-cudn-pool
+spec:
+  blocks:
+    - cidr: "10.227.120.0/21"
+  serviceSelector:
+    matchLabels:
+      cudn-network: "linux-non-prod"
+---
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: windows-cudn-pool
+spec:
+  blocks:
+    - cidr: "10.227.128.0/21"
+  serviceSelector:
+    matchLabels:
+      cudn-network: "windows-non-prod"

@@ -1,5 +1,18 @@
 applications:
 
+  # Cilium BGP Control Plane resources — synced after Helm install of Cilium CNI.
+  # Manages: CiliumBGPClusterConfig, CiliumBGPPeerConfig, CiliumBGPAdvertisement,
+  #          CiliumLoadBalancerIPPool (service, linux-cudn, windows-cudn pools).
+  # Sync wave 20 ensures BGP resources are applied after core cluster operators.
+  cilium-cni:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: '20'
+    destination:
+      namespace: kube-system
+    source:
+      path: groups/non-prod/overlays/cilium-cni
+
   vault-config-operator:
     annotations:
       argocd.argoproj.io/compare-options: IgnoreExtraneous

@@ -1,0 +1,34 @@
+---
+# Namespace: linux-non-prod
+# Label k8s.ovn.org/primary-user-defined-network opts this namespace into the
+# Primary BGP CUDN (cluster-udn-bgp-prod). Must be present BEFORE any VMs are
+# created here — MTV will land migrated Linux VMs into this namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: linux-non-prod
+  labels:
+    k8s.ovn.org/primary-user-defined-network: ""
+    cluster-udn: bgp-prod
+    environment: non-prod
+    app.kubernetes.io/component: vm-migration
+  annotations:
+    openshift.io/description: "Linux VMs migrated from on-prem — BGP direct-routed via Primary CUDN"
+    openshift.io/display-name: "Linux Non-Prod VMs"
+    argocd.argoproj.io/sync-options: ServerSideApply=true
+---
+# Namespace: windows-non-prod
+# Same Primary BGP CUDN opt-in. MTV lands migrated Windows VMs here.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: windows-non-prod
+  labels:
+    k8s.ovn.org/primary-user-defined-network: ""
+    cluster-udn: bgp-prod
+    environment: non-prod
+    app.kubernetes.io/component: vm-migration
+  annotations:
+    openshift.io/description: "Windows VMs migrated from on-prem — BGP direct-routed via Primary CUDN"
+    openshift.io/display-name: "Windows Non-Prod VMs"
+    argocd.argoproj.io/sync-options: ServerSideApply=true

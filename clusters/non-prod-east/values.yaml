@@ -1,5 +1,31 @@
 applications:
 
+  #---------------------------------------------------------------------------
+  # BGP Direct Routing — VPC Route Server + FRR-K8s
+  # Enables non-NATted L3 routing of Pod IPs (10.100.0.0/16) via AWS VPC Route Server.
+  #
+  # PREREQUISITES — run in order before enabling this app:
+  #   bash scripts/bgp/01-create-route-server.sh
+  #   bash scripts/bgp/02-create-bgp-nodepools.sh
+  #   bash scripts/bgp/03-disable-src-dst-check.sh
+  #   bash scripts/bgp/04-patch-network-operator.sh
+  #   bash scripts/bgp/05-apply-frr-config.sh
+  #
+  # sync-wave: 10  — after platform operators, before VM migrations
+  # SkipDryRunOnMissingResource: FRRConfiguration + RouteAdvertisements CRDs
+  #   only exist after Phase 4 (Network operator patch)
+  #---------------------------------------------------------------------------
+  bgp-routing:
+    annotations:
+      argocd.argoproj.io/compare-options: IgnoreExtraneous
+      argocd.argoproj.io/sync-wave: "10"
+      argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true,ServerSideApply=true
+    destination:
+      namespace: openshift-frr-k8s
+    source:
+      path: clusters/non-prod-east/overlays/bgp-routing
+      targetRevision: main
+
   kube-ops-view:
     annotations:
       argocd.argoproj.io/compare-options: IgnoreExtraneous

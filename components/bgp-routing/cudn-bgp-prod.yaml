@@ -1,0 +1,39 @@
+---
+# ClusterUserDefinedNetwork — BGP Direct Routed Primary Network
+# Role     : Primary — replaces the default pod network for linux-non-prod and windows-non-prod
+# IPAM     : Persistent — VMs keep the same 10.100.x.x IP across restarts
+# Topology : Layer2
+#
+# Subnet 10.100.0.0/16 does NOT overlap with any existing ranges:
+#   VPC / machine CIDR  : 10.227.96.0/20
+#   Linux secondary CUDN: 10.227.120.0/21  (IPSec VPN secondary interface — kept)
+#   Windows secondary   : 10.227.128.0/21  (IPSec VPN secondary interface — kept)
+#   FSx VPC             : 10.227.96.0/20
+#
+# VMs migrated via MTV will receive a 10.100.x.x address as their primary interface.
+# BGP router worker nodes advertise this subnet to the AWS VPC Route Server, which
+# programs VPC subnet route tables so on-prem and VPC hosts can reach VMs directly.
+#
+# Secondary CUDNs (linux-non-prod, windows-non-prod) remain in place and can still
+# be attached to VMs that need the secondary interface for IPSec VPN / static IP use.
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: cluster-udn-bgp-prod
+  labels:
+    advertise: "true"
+    environment: non-prod
+  annotations:
+    description: "Primary L2 CUDN for BGP-advertised direct-routed VMs — linux-non-prod and windows-non-prod"
+spec:
+  namespaceSelector:
+    matchLabels:
+      cluster-udn: bgp-prod
+  network:
+    topology: Layer2
+    layer2:
+      role: Primary
+      ipam:
+        lifecycle: Persistent
+      subnets:
+      - 10.100.0.0/16

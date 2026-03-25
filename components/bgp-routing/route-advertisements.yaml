@@ -1,0 +1,24 @@
+---
+# RouteAdvertisements — wires FRR-K8s to advertise the BGP CUDN pod network
+# nodeSelector targets only the dedicated bgp_router worker nodes (1 per AZ)
+# frrConfigurationSelector: {} selects all FRRConfiguration objects in the cluster
+# networkSelectors targets CUDNs with label advertise: "true"
+# NOTE: The rosa-bgp repo has a typo "bgp_roter" — corrected here to "bgp_router"
+apiVersion: k8s.ovn.org/v1
+kind: RouteAdvertisements
+metadata:
+  name: bgp-prod-advertisements
+spec:
+  nodeSelector:
+    labelSelector:
+      matchLabels:
+        bgp_router: "true"
+  frrConfigurationSelector: {}
+  networkSelectors:
+  - networkSelectionType: ClusterUserDefinedNetworks
+    clusterUserDefinedNetworkSelector:
+      networkSelector:
+        matchLabels:
+          advertise: "true"
+  advertisements:
+  - "PodNetwork"

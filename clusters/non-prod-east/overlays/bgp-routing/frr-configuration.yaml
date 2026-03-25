@@ -1,0 +1,69 @@
+---
+# FRRConfiguration — BGP peering from ROSA router worker nodes to AWS VPC Route Server
+# Namespace  : openshift-frr-k8s (created by Phase 4 Network operator patch)
+# nodeSelector: bgp_router=true  (targets the 3 dedicated router MachinePools)
+# ROSA ASN   : 65001
+# RS ASN     : 65000
+#
+# Neighbor IPs are the ENI addresses of the 6 Route Server Endpoints
+# (2 per private subnet × 3 AZs). Populated by scripts/bgp/05-apply-frr-config.sh.
+#
+# disableMP: true  — Route Server does not support MP-BGP extensions
+# toReceive.allowed.mode: all — accept all prefixes received from Route Server
+apiVersion: frrk8s.metallb.io/v1beta1
+kind: FRRConfiguration
+metadata:
+  name: bgp-router-nodes
+  namespace: openshift-frr-k8s
+  annotations:
+    description: "FRR BGP peering to AWS VPC Route Server — non-prod us-east-1"
+spec:
+  nodeSelector:
+    matchLabels:
+      bgp_router: "true"
+  bgp:
+    routers:
+    - asn: 65001
+      neighbors:
+      # AZ us-east-1a — Route Server Endpoint A
+      - address: PLACEHOLDER_RS_EP_AZ1_A
+        asn: 65000
+        disableMP: true
+        toReceive:
+          allowed:
+            mode: all
+      # AZ us-east-1a — Route Server Endpoint B
+      - address: PLACEHOLDER_RS_EP_AZ1_B
+        asn: 65000
+        disableMP: true
+        toReceive:
+          allowed:
+            mode: all
+      # AZ us-east-1c — Route Server Endpoint A
+      - address: PLACEHOLDER_RS_EP_AZ2_A
+        asn: 65000
+        disableMP: true
+        toReceive:
+          allowed:
+            mode: all
+      # AZ us-east-1c — Route Server Endpoint B
+      - address: PLACEHOLDER_RS_EP_AZ2_B
+        asn: 65000
+        disableMP: true
+        toReceive:
+          allowed:
+            mode: all
+      # AZ us-east-1d — Route Server Endpoint A
+      - address: PLACEHOLDER_RS_EP_AZ3_A
+        asn: 65000
+        disableMP: true
+        toReceive:
+          allowed:
+            mode: all
+      # AZ us-east-1d — Route Server Endpoint B
+      - address: PLACEHOLDER_RS_EP_AZ3_B
+        asn: 65000
+        disableMP: true
+        toReceive:
+          allowed:
+            mode: all

@@ -5,8 +5,8 @@ applications:
   # Enables non-NATted L3 routing of Pod IPs (10.100.0.0/16) via AWS VPC Route Server.
   #
   # PREREQUISITES:
-  #   AWS team provisions: VPC Route Server (ASN 65000), 6 RS Endpoints,
-  #   3 MachinePools (bgp_router=true, 1/AZ), RS Peers, src/dst check disabled.
+  #   AWS team provisions: VPC Route Server (ASN 65105), 3 RS Endpoints (1/AZ),
+  #   3 MachinePools (bgp_router=true, r6i.metal, 1/AZ), RS Peers (bfd), src/dst check disabled.
   #   Fill in scripts/bgp/bgp-state.env (copy from bgp-state.env.template), then:
   #   bash scripts/bgp/01-patch-network-operator.sh
   #   bash scripts/bgp/02-apply-frr-config.sh

@@ -1,6 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# frr-configuration.yaml lives in openshift-frr-k8s (cluster-scoped resource, no namespace override)
+# ../../../../components/bgp-routing contains: namespace.yaml, cudn-bgp-prod.yaml, route-advertisements.yaml
 resources:
   - frr-configuration.yaml
   - ../../../../components/bgp-routing

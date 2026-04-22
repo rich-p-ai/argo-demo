@@ -1,0 +1,25 @@
+---
+# ClusterUserDefinedNetwork — Unified CUSA Non-Prod
+# Single L2 segment replacing linux-non-prod and windows-non-prod CUDNs
+# Covers VMs from both namespaces on one broadcast domain:
+#   - linux-non-prod   : 10.227.120.0/21  gw 10.227.120.1  (ipsec-vpn-linux)
+#   - windows-non-prod : 10.227.128.0/21  gw 10.227.128.1  (ipsec-vpn-windows)
+# IPAM disabled — VMs manage their own static IPs via NetworkManager/netsh
+apiVersion: k8s.ovn.org/v1
+kind: ClusterUserDefinedNetwork
+metadata:
+  name: cusa
+  annotations:
+    description: "Unified CUDN for all CUSA non-prod VMs — Layer 2 without IPAM"
+    network.openshift.io/purpose: "vm-migration-cusa"
+spec:
+  namespaceSelector:
+    matchLabels:
+      udn: cusa
+  network:
+    topology: Layer2
+    layer2:
+      role: Secondary
+      ipam:
+        mode: Disabled
+      mtu: 1500

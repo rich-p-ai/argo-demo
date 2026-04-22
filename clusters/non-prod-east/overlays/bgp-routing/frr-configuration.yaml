@@ -1,11 +1,15 @@
 ---
 # FRRConfiguration — BGP peering from ROSA worker nodes to AWS VPC Route Server
 # Namespace  : openshift-frr-k8s
-# nodeSelector: bgp_router=true (existing r6i.metal workers — all 3 nodes)
+# nodeSelector: bgp_router=true (all 3 r6i.metal workers)
 # ROSA ASN   : 65106
 # RS ASN     : 65105
 # 1 endpoint per AZ — 3 BGP neighbors total
 # RS deployed: 2026-03-25  RS ID: rs-023b9b8f57512d209
+#
+# RS peers were configured with PeerLivenessDetection: bfd by the AWS team.
+# bfdProfile: aws-rs enables BFD on FRR side so RS BFD status goes from down→up.
+# disableMP: true is required by RouteAdvertisements controller (despite deprecation).
 apiVersion: frrk8s.metallb.io/v1beta1
 kind: FRRConfiguration
 metadata:
@@ -24,18 +28,24 @@ spec:
       # us-east-1a — rse-073b40f402cf6542d
       - address: 10.227.96.137
         asn: 65105
+        disableMP: true
+        bfdProfile: aws-rs
         toReceive:
           allowed:
             mode: all
       # us-east-1c — rse-02e6cad5a4776e198
       - address: 10.227.103.120
         asn: 65105
+        disableMP: true
+        bfdProfile: aws-rs
         toReceive:
           allowed:
             mode: all
       # us-east-1d — rse-0839973adf387794d
       - address: 10.227.106.159
         asn: 65105
+        disableMP: true
+        bfdProfile: aws-rs
         toReceive:
           allowed:
             mode: all

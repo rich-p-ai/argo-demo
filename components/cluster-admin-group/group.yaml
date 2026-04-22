@@ -13,10 +13,11 @@ metadata:
     app.kubernetes.io/managed-by: gitops
     team: platform-engineering
 users:
-  # Platform Engineering Team Members
-  # Add or remove users by modifying this list
-  - cluster-admin 
-  - Q22529
-  - Q11013
-  - q22529
-  - q22179
+  - cluster-admin
+  - q10922   #Non-Prod Admin
+  - q11013   #Lee
+  - q22529   #Rich
+  - q22179   #Mark
+  - q22651   #Lee
+  - q22653   #Nitin
+  - q22654   #Akash

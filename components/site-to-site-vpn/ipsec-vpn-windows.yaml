@@ -298,7 +298,7 @@ stringData:
               leftcert=client-cert.pem
               left=%defaultroute
               leftsubnet=10.227.128.0/21
-              rightsubnet=10.63.0.0/16,10.68.0.0/16,10.99.0.0/16,10.110.0.0/16,10.140.0.0/16,10.141.0.0/16,10.158.0.0/16,10.227.112.0/20
+              rightsubnet=0.0.0.0/0
               auto=start
               closeaction=restart
               type=tunnel
@@ -309,18 +309,16 @@ stringData:
           conn aws-vpn-tunnel1
               right=3.232.27.186
               rightid="CN=vpn-059ee0661e851adf4.endpoint-0"
-              leftid="vpn-059ee0661e851adf4.endpoint-0"
+              leftid="CN=vpn-059ee0661e851adf4.endpoint-1"
               leftsourceip=169.254.43.134
-              mark=100
               reqid=1
 
           # AWS VPN Tunnel 2 (Secondary) - 98.94.136.2
           conn aws-vpn-tunnel2
               right=98.94.136.2
               rightid="CN=vpn-059ee0661e851adf4.endpoint-1"
-              leftid="vpn-059ee0661e851adf4.endpoint-0"
+              leftid="CN=vpn-059ee0661e851adf4.endpoint-1"
               leftsourceip=169.254.118.14
-              mark=200
               reqid=2
 
       # StrongSwan secrets - RSA key-based auth

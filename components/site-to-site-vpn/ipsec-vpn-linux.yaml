@@ -1,5 +1,5 @@
 ---
-# IPSec VPN Gateway VM for linux-non-prod CUDN (10.227.120.0/21)
+# IPSec VPN Gateway VM on CUSA CUDN (gateway: 10.227.120.1/21)
 # Runs StrongSwan for VPN tunnel termination + gateway routing
 # Uses same AWS VPN connection and certificates as the windows-non-prod VPN
 # VPN Connection: vpn-059ee0661e851adf4
@@ -11,9 +11,9 @@ metadata:
   labels:
     app: ipsec-vpn-linux
     role: vpn-gateway
-    network: linux-non-prod
+    network: cusa
   annotations:
-    description: "IPSec VPN gateway for linux-non-prod CUDN - StrongSwan with cert auth"
+    description: "IPSec VPN gateway for CUSA CUDN - StrongSwan with cert auth"
 spec:
   running: true
   dataVolumeTemplates:
@@ -35,7 +35,7 @@ spec:
       labels:
         app: ipsec-vpn-linux
         role: vpn-gateway
-        network: linux-non-prod
+        network: cusa
     spec:
       domain:
         cpu:
@@ -53,10 +53,10 @@ spec:
               disk:
                 bus: virtio
           interfaces:
-            - name: default
-              masquerade: {}
             - name: cudn
               bridge: {}
+            - name: default
+              masquerade: {}
         resources:
           requests:
             memory: 4Gi
@@ -65,11 +65,11 @@ spec:
             memory: 4Gi
             cpu: 2
       networks:
-        - name: default
-          pod: {}
         - name: cudn
           multus:
-            networkName: linux-non-prod
+            networkName: cusa
+        - name: default
+          pod: {}
       volumes:
         - name: root
           dataVolume:
@@ -141,14 +141,14 @@ stringData:
         content: |
           PermitRootLogin yes
 
-      - path: /etc/NetworkManager/system-connections/eth1.nmconnection
+      - path: /etc/NetworkManager/system-connections/eth0.nmconnection
         owner: root:root
         permissions: '0600'
         content: |
           [connection]
-          id=eth1
+          id=eth0
           type=ethernet
-          interface-name=eth1
+          interface-name=eth0
           autoconnect=true
 
           [ipv4]
@@ -296,8 +296,8 @@ stringData:
               authby=rsasig
               leftcert=client-cert.pem
               left=%defaultroute
-              leftsubnet=10.227.120.0/21
-              rightsubnet=10.63.0.0/16,10.68.0.0/16,10.99.0.0/16,10.110.0.0/16,10.140.0.0/16,10.141.0.0/16,10.158.0.0/16,10.227.112.0/20
+              leftsubnet=10.227.120.0/21,10.227.128.0/21
+              rightsubnet=0.0.0.0/0
               auto=start
               closeaction=restart
               type=tunnel
@@ -308,18 +308,16 @@ stringData:
           conn aws-vpn-tunnel1
               right=3.232.27.186
               rightid="CN=vpn-059ee0661e851adf4.endpoint-0"
-              leftid="vpn-059ee0661e851adf4.endpoint-0"
+              leftid="CN=vpn-059ee0661e851adf4.endpoint-1"
               leftsourceip=169.254.43.134
-              mark=100
               reqid=1
 
           # AWS VPN Tunnel 2 (Secondary) - 98.94.136.2
           conn aws-vpn-tunnel2
               right=98.94.136.2
               rightid="CN=vpn-059ee0661e851adf4.endpoint-1"
-              leftid="vpn-059ee0661e851adf4.endpoint-0"
+              leftid="CN=vpn-059ee0661e851adf4.endpoint-1"
               leftsourceip=169.254.118.14
-              mark=200
               reqid=2
 
       # StrongSwan secrets - RSA key-based auth
@@ -341,24 +339,28 @@ stringData:
           echo "linux-non-prod VPN Gateway Configuration"
           echo "=========================================="
 
-          # Wait for eth1 (CUDN interface)
+          # Wait for eth0 (CUDN interface - primary)
           for i in {1..30}; do
-            if ip link show eth1 &>/dev/null; then
-              echo "[OK] eth1 (CUDN) interface found"
+            if ip link show eth0 &>/dev/null; then
+              echo "[OK] eth0 (CUDN) interface found"
               break
             fi
-            echo "Waiting for eth1... ($i/30)"
+            echo "Waiting for eth0... ($i/30)"
             sleep 2
           done
 
-          # Ensure eth1 has the gateway IP
-          if ! ip addr show eth1 | grep -q "10.227.120.1/21"; then
-            echo "Configuring eth1 with gateway IP 10.227.120.1/21..."
-            ip addr flush dev eth1
-            ip addr add 10.227.120.1/21 dev eth1
-            ip link set eth1 up
+          # Ensure eth0 has the gateway IP
+          if ! ip addr show eth0 | grep -q "10.227.120.1/21"; then
+            echo "Configuring eth0 with gateway IP 10.227.120.1/21..."
+            ip addr flush dev eth0
+            ip addr add 10.227.120.1/21 dev eth0
+            ip link set eth0 up
           fi
-          echo "[OK] eth1: 10.227.120.1/21"
+          echo "[OK] eth0: 10.227.120.1/21"
+
+          # Route for windows-non-prod /21 on same CUSA L2 segment
+          ip route add 10.227.128.0/21 dev eth0 2>/dev/null || true
+          echo "[OK] Route: 10.227.128.0/21 via eth0 (CUSA CUDN)"
 
           # Kernel parameters for routing + IPSec
           echo "Configuring kernel parameters..."
@@ -380,17 +382,19 @@ stringData:
           iptables -t nat -F
           iptables -F FORWARD
 
-          # NAT for CUDN traffic going to external networks via eth0 (pod network)
-          iptables -t nat -A POSTROUTING -s 10.227.120.0/21 ! -d 10.227.120.0/21 -o eth0 -j MASQUERADE
+          # NAT for CUDN traffic going to external networks via eth1 (pod network)
+          iptables -t nat -A POSTROUTING -s 10.227.120.0/21 ! -d 10.227.120.0/21 -o eth1 -j MASQUERADE
+          iptables -t nat -A POSTROUTING -s 10.227.128.0/21 ! -d 10.227.128.0/21 -o eth1 -j MASQUERADE
 
           # Forward from CUDN to pod network (outbound)
-          iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+          iptables -A FORWARD -i eth0 -o eth1 -j ACCEPT
           # Forward from VPN/pod network to CUDN VMs (inbound from on-prem)
-          iptables -A FORWARD -i eth0 -o eth1 -d 10.227.120.0/21 -j ACCEPT
+          iptables -A FORWARD -i eth1 -o eth0 -d 10.227.120.0/21 -j ACCEPT
+          iptables -A FORWARD -i eth1 -o eth0 -d 10.227.128.0/21 -j ACCEPT
           # Return traffic for established connections
-          iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+          iptables -A FORWARD -i eth1 -o eth0 -m state --state RELATED,ESTABLISHED -j ACCEPT
           # VM-to-VM forwarding within CUDN
-          iptables -A FORWARD -i eth1 -o eth1 -j ACCEPT
+          iptables -A FORWARD -i eth0 -o eth0 -j ACCEPT
           # Drop invalid packets
           iptables -A FORWARD -m state --state INVALID -j DROP
 
@@ -425,17 +429,47 @@ stringData:
           chmod 644 /etc/strongswan/ipsec.d/certs/client-cert.pem
           chmod 644 /etc/strongswan/ipsec.d/cacerts/ca-chain.pem
 
-          # Find and start StrongSwan
-          STARTER_BIN=$(find /usr -name starter -type f 2>/dev/null | head -1)
-          if [ -n "$STARTER_BIN" ]; then
-            echo "Starting StrongSwan ($STARTER_BIN)..."
-            $STARTER_BIN --daemon charon 2>&1 &
-            sleep 10
-            echo "[OK] StrongSwan started"
-            strongswan statusall 2>/dev/null || ipsec statusall 2>/dev/null || echo "Checking: ps aux | grep charon"
-          else
-            echo "[WARN] StrongSwan starter not found after install"
+          # Disable the stroke-mode starter service to avoid duplicate daemons
+          systemctl stop strongswan-starter 2>/dev/null || true
+          systemctl disable strongswan-starter 2>/dev/null || true
+          systemctl mask strongswan-starter 2>/dev/null || true
+
+          # Split CA chain into individual files (StrongSwan only loads first cert from combined PEM)
+          if [ -f /etc/strongswan/ipsec.d/cacerts/ca-chain.pem ]; then
+            cd /etc/strongswan/ipsec.d/cacerts/
+            csplit -f cert- -z ca-chain.pem '/-----BEGIN CERTIFICATE-----/' '{*}' 2>/dev/null || true
+            [ -f cert-00 ] && mv cert-00 subordinate-ca.pem
+            [ -f cert-01 ] && mv cert-01 root-ca.pem
+            echo "[OK] CA chain split into individual cert files"
           fi
+
+          # Copy certs to swanctl directories for systemd mode
+          mkdir -p /etc/strongswan/swanctl/x509 /etc/strongswan/swanctl/private /etc/strongswan/swanctl/x509ca
+          cp /etc/strongswan/ipsec.d/certs/client-cert.pem /etc/strongswan/swanctl/x509/ 2>/dev/null || true
+          cp /etc/strongswan/ipsec.d/private/client-key.pem /etc/strongswan/swanctl/private/ 2>/dev/null || true
+          cp /etc/strongswan/ipsec.d/cacerts/*.pem /etc/strongswan/swanctl/x509ca/ 2>/dev/null || true
+
+          # Write swanctl connection config (base64 avoids heredoc/YAML escaping issues)
+          # Both tunnels use reqid=1 so the single XFRM dir in policy covers traffic from either tunnel
+          echo "Y29ubmVjdGlvbnMgewogICAgYXdzLXZwbi10dW5uZWwxIHsKICAgICAgICB2ZXJzaW9uID0gMQogICAgICAgIHByb3Bvc2FscyA9IGFlczEyOC1zaGExLW1vZHAxMDI0CiAgICAgICAgcmVrZXlfdGltZSA9IDI4ODAwcwogICAgICAgIGRwZF9kZWxheSA9IDEwcwogICAgICAgIGRwZF90aW1lb3V0ID0gMzBzCiAgICAgICAgcmVhdXRoX3RpbWUgPSAwcwogICAgICAgIGxvY2FsX2FkZHJzID0gJWFueQogICAgICAgIHJlbW90ZV9hZGRycyA9IDMuMjMyLjI3LjE4NgogICAgICAgIGxvY2FsIHsKICAgICAgICAgICAgYXV0aCA9IHB1YmtleQogICAgICAgICAgICBjZXJ0cyA9IGNsaWVudC1jZXJ0LnBlbQogICAgICAgICAgICBpZCA9ICJDTj12cG4tMDU5ZWUwNjYxZTg1MWFkZjQuZW5kcG9pbnQtMSIKICAgICAgICB9CiAgICAgICAgcmVtb3RlIHsKICAgICAgICAgICAgYXV0aCA9IHB1YmtleQogICAgICAgICAgICBpZCA9ICJDTj12cG4tMDU5ZWUwNjYxZTg1MWFkZjQuZW5kcG9pbnQtMCIKICAgICAgICB9CiAgICAgICAgY2hpbGRyZW4gewogICAgICAgICAgICBuZXQgewogICAgICAgICAgICAgICAgbG9jYWxfdHMgPSAxMC4yMjcuMTIwLjAvMjEKICAgICAgICAgICAgICAgIHJlbW90ZV90cyA9IDAuMC4wLjAvMAogICAgICAgICAgICAgICAgZXNwX3Byb3Bvc2FscyA9IGFlczEyOC1zaGExLW1vZHAxMDI0CiAgICAgICAgICAgICAgICByZWtleV90aW1lID0gMzYwMHMKICAgICAgICAgICAgICAgIHN0YXJ0X2FjdGlvbiA9IHN0YXJ0CiAgICAgICAgICAgICAgICBjbG9zZV9hY3Rpb24gPSBzdGFydAogICAgICAgICAgICAgICAgZHBkX2FjdGlvbiA9IHJlc3RhcnQKICAgICAgICAgICAgICAgIG1vZGUgPSB0dW5uZWwKICAgICAgICAgICAgICAgIHBvbGljaWVzID0geWVzCiAgICAgICAgICAgICAgICByZXFpZCA9IDEKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KICAgIGF3cy12cG4tdHVubmVsMiB7CiAgICAgICAgdmVyc2lvbiA9IDEKICAgICAgICBwcm9wb3NhbHMgPSBhZXMxMjgtc2hhMS1tb2RwMTAyNAogICAgICAgIHJla2V5X3RpbWUgPSAyODgwMHMKICAgICAgICBkcGRfZGVsYXkgPSAxMHMKICAgICAgICBkcGRfdGltZW91dCA9IDMwcwogICAgICAgIHJlYXV0aF90aW1lID0gMHMKICAgICAgICBsb2NhbF9hZGRycyA9ICVhbnkKICAgICAgICByZW1vdGVfYWRkcnMgPSA5OC45NC4xMzYuMgogICAgICAgIGxvY2FsIHsKICAgICAgICAgICAgYXV0aCA9IHB1YmtleQogICAgICAgICAgICBjZXJ0cyA9IGNsaWVudC1jZXJ0LnBlbQogICAgICAgICAgICBpZCA9ICJDTj12cG4tMDU5ZWUwNjYxZTg1MWFkZjQuZW5kcG9pbnQtMSIKICAgICAgICB9CiAgICAgICAgcmVtb3RlIHsKICAgICAgICAgICAgYXV0aCA9IHB1YmtleQogICAgICAgICAgICBpZCA9ICJDTj12cG4tMDU5ZWUwNjYxZTg1MWFkZjQuZW5kcG9pbnQtMSIKICAgICAgICB9CiAgICAgICAgY2hpbGRyZW4gewogICAgICAgICAgICBuZXQgewogICAgICAgICAgICAgICAgbG9jYWxfdHMgPSAxMC4yMjcuMTIwLjAvMjEKICAgICAgICAgICAgICAgIHJlbW90ZV90cyA9IDAuMC4wLjAvMAogICAgICAgICAgICAgICAgZXNwX3Byb3Bvc2FscyA9IGFlczEyOC1zaGExLW1vZHAxMDI0CiAgICAgICAgICAgICAgICByZWtleV90aW1lID0gMzYwMHMKICAgICAgICAgICAgICAgIHN0YXJ0X2FjdGlvbiA9IHN0YXJ0CiAgICAgICAgICAgICAgICBjbG9zZV9hY3Rpb24gPSBzdGFydAogICAgICAgICAgICAgICAgZHBkX2FjdGlvbiA9IHJlc3RhcnQKICAgICAgICAgICAgICAgIG1vZGUgPSB0dW5uZWwKICAgICAgICAgICAgICAgIHBvbGljaWVzID0geWVzCiAgICAgICAgICAgICAgICByZXFpZCA9IDEKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KfQo=" | base64 -d > /etc/strongswan/swanctl/conf.d/aws-vpn.conf
+          chmod 600 /etc/strongswan/swanctl/conf.d/aws-vpn.conf
+          echo "[OK] swanctl conf.d/aws-vpn.conf written"
+
+          # Enable and start StrongSwan in systemd/swanctl mode
+          systemctl enable strongswan
+          systemctl start strongswan
+          sleep 10
+          swanctl --load-all
+          echo "[OK] StrongSwan started (systemd/swanctl mode)"
+          swanctl --list-sas 2>/dev/null | grep -c INSTALLED && echo "[OK] CHILD_SAs installed" || echo "[WARN] No CHILD_SAs yet"
+
+          # Fix routing table 220: add CUDN route so local L2 traffic stays on eth0.
+          # StrongSwan's table 220 has 10.227.112.0/20 (on-prem) which is a superset
+          # of 10.227.120.0/21 (CUDN). Without this, CUDN VM-to-VM traffic gets
+          # hijacked and sent out eth1 instead of staying on eth0.
+          ip route add 10.227.120.0/21 dev eth0 src 10.227.120.1 table 220 2>/dev/null || true
+          ip route add 10.227.128.0/21 dev eth0 src 10.227.120.1 table 220 2>/dev/null || true
+          echo "[OK] Table 220 CUDN routes added (linux + windows /21s)"
 
           echo ""
           echo "=== Network Status ==="
@@ -529,7 +563,13 @@ stringData:
           echo -n "AWS Tunnel 2 (98.94.136.2): "
           ping -c 1 -W 2 98.94.136.2 >/dev/null 2>&1 && echo "OK" || echo "FAIL"
           echo -n "Gateway IP (10.227.120.1): "
-          ip addr show eth1 | grep -q "10.227.120.1" && echo "OK" || echo "FAIL"
+          ip addr show eth0 | grep -q "10.227.120.1" && echo "OK" || echo "FAIL"
+          echo -n "Table 220 linux route: "
+          ip route show table 220 | grep -q "10.227.120.0/21 dev eth0" && echo "OK" || echo "MISSING"
+          echo -n "Table 220 windows route: "
+          ip route show table 220 | grep -q "10.227.128.0/21 dev eth0" && echo "OK" || echo "MISSING"
+          echo -n "L2 route to windows /21: "
+          ip route show | grep -q "10.227.128.0/21 dev eth0" && echo "OK" || echo "MISSING"
           echo "=========================================="
 
       # Inject certificates from Kubernetes secret into the VM
@@ -569,7 +609,7 @@ stringData:
     runcmd:
       - sleep 5
       - nmcli connection reload
-      - nmcli connection up eth1 || true
+      - nmcli connection up eth0 || true
       - sleep 10
       - /usr/local/bin/configure-vpn-gateway.sh 2>&1 | tee /var/log/vpn-gateway-config.log
       - |
@@ -578,7 +618,8 @@ stringData:
         linux-non-prod VPN Gateway VM
         ==========================================
         Role: StrongSwan VPN + CUDN Gateway
-        Gateway IP: 10.227.120.1/21 (linux-non-prod CUDN)
+        Gateway IP: 10.227.120.1/21 (CUSA CUDN)
+        Subnets: 10.227.120.0/21 (linux) + 10.227.128.0/21 (windows)
         VPN: AWS vpn-059ee0661e851adf4
 
         Commands:
@@ -604,7 +645,8 @@ stringData:
       ==========================================
       linux-non-prod VPN Gateway VM Ready
       ==========================================
-      Gateway IP: 10.227.120.1/21 (linux-non-prod CUDN)
+      Gateway IP: 10.227.120.1/21 (CUSA CUDN)
+      Subnets: 10.227.120.0/21 (linux) + 10.227.128.0/21 (windows)
       VPN Connection: vpn-059ee0661e851adf4
       Tunnels: 3.232.27.186, 98.94.136.2
 
